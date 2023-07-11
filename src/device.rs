@@ -2,6 +2,7 @@ use uuid::Uuid;
 use crate::bus::BusController;
 use std::any::Any;
 use std::collections::HashMap;
+use std::fmt::Display;
 use unbox_box::BoxExt;
 
 #[derive(PartialEq, Debug)]
@@ -11,6 +12,20 @@ pub enum DeviceError {
     DuplicateController,
     HardwareError
 }
+
+impl Display for DeviceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&match self {
+            DeviceError::NotFound(id) => format!("device with address {} is not registered", id),
+            DeviceError::MissingController(name) => format!("bus controller \"{}\" was unavailable", name),
+            DeviceError::DuplicateController => format!("controller of the same type is already registered"),
+            DeviceError::HardwareError => format!("a hardware error has occurred")
+        });
+
+        std::fmt::Result::Ok(())
+    }
+}
+
 pub trait Device : Any  {
     fn load(&self, parent: &DeviceServer) -> Result<(), DeviceError>;
     fn unload(&self) -> Result<(), DeviceError>;

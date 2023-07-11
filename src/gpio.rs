@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, cell::RefCell};
+use std::{collections::HashMap, rc::Rc, cell::RefCell, fmt::Display};
 use uuid::Uuid;
 
 pub struct PinState {
@@ -34,6 +34,20 @@ pub enum GpioError {
     Panic(String)
 }
 
+impl Display for GpioError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&match self {
+            GpioError::Busy(p) => format!("pin {} is busy", p),
+            GpioError::PinNotFound(p) => format!("pin {} is not available", p),
+            GpioError::LeaseNotFound => format!("specified lease does not exist"),
+            GpioError::PermissionDenied(s) => format!("permission denied: {}", s),
+            GpioError::Panic(s) => format!("panic: {}", s),
+        });
+
+        std::fmt::Result::Ok(())
+    }
+}
+
 pub struct GpioBorrowChecker {
     pins: HashMap<u8, PinState>,
     leases: HashMap<Uuid, Vec<u8>>
@@ -51,7 +65,7 @@ impl GpioBorrowChecker {
         Rc::new(RefCell::new(GpioBorrowChecker::new(pins)))
     }
 
-    pub fn get_pin(&self, pin: u8) -> Result<&PinState, GpioError> {
+    pub fn get(&self, pin: u8) -> Result<&PinState, GpioError> {
         match self.pins.contains_key(&pin) {
             true => Ok(self.pins.get(&pin).unwrap()),
             false => Err(GpioError::PinNotFound(pin))
