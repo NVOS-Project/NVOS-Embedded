@@ -12,7 +12,7 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> GpioError {
         Error::PinNotAvailable(p) => GpioError::PinNotFound(p),
         Error::PinUsed(p) => GpioError::Busy(p),
         Error::PermissionDenied(s) => GpioError::PermissionDenied(s),
-        _ => GpioError::Panic(String::from(default_err_msg))
+        _ => GpioError::Other(String::from(default_err_msg))
     }
 }
 
@@ -103,17 +103,16 @@ impl RawBusController {
     
     fn borrow_pin(&mut self, pin_id: u8) -> Result<Pin, GpioError> {
         let mut borrow_checker = self.gpio_borrow.borrow_mut();
-        let bcm_id = borrow_checker.get(pin_id)?.bcm_id();
+        let bcm_id = borrow_checker.get(&pin_id)?.bcm_id();
+
+        if !borrow_checker.can_borrow_one(pin_id) {
+            return Err(GpioError::Busy(pin_id));
+        }
+
+        let pin = self.gpio_controller.get(bcm_id)
+            .map_err(|err| rppal_map_err(err, &format!("Internal RPPAL error while opening pin (BCM {})", bcm_id)))?;
+
         let borrow_id = borrow_checker.borrow_one(pin_id)?;
-
-        let pin = match self.gpio_controller.get(bcm_id) {
-            Ok(p) => p,
-            Err(e) => {
-                borrow_checker.release(&borrow_id)?;
-                return Err(rppal_map_err(e, &format!("Internal RPPAL error while opening pin (BCM {})", bcm_id)));
-            }
-        };
-
         self.owned_pins.insert(pin_id, borrow_id);
         Ok(pin)
     }
