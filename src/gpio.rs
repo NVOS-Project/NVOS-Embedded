@@ -31,7 +31,7 @@ pub enum GpioError {
     PinNotFound(u8),
     LeaseNotFound,
     PermissionDenied(String),
-    Panic(String)
+    Other(String)
 }
 
 impl Display for GpioError {
@@ -41,7 +41,7 @@ impl Display for GpioError {
             GpioError::PinNotFound(p) => format!("pin {} is not available", p),
             GpioError::LeaseNotFound => format!("specified lease does not exist"),
             GpioError::PermissionDenied(s) => format!("permission denied: {}", s),
-            GpioError::Panic(s) => format!("panic: {}", s),
+            GpioError::Other(s) => format!("{}", s),
         })
     }
 }
@@ -63,10 +63,10 @@ impl GpioBorrowChecker {
         Rc::new(RefCell::new(GpioBorrowChecker::new(pins)))
     }
 
-    pub fn get(&self, pin: u8) -> Result<&PinState, GpioError> {
-        match self.pins.contains_key(&pin) {
-            true => Ok(self.pins.get(&pin).unwrap()),
-            false => Err(GpioError::PinNotFound(pin))
+    pub fn get(&self, pin: &u8) -> Result<&PinState, GpioError> {
+        match self.pins.contains_key(pin) {
+            true => Ok(self.pins.get(pin).unwrap()),
+            false => Err(GpioError::PinNotFound(pin.to_owned()))
         }
     }
 
@@ -90,11 +90,21 @@ impl GpioBorrowChecker {
         self.leases.contains_key(borrow_id)
     }
 
-    pub fn is_free(&self, pin: u8) -> Option<bool> {
+    pub fn can_borrow_one(&self, pin: u8) -> bool {
         match self.pins.contains_key(&pin) {
-            true => Some(!self.pins.get(&pin).unwrap().leased),
-            false => None
+            true => !self.pins.get(&pin).unwrap().leased,
+            false => false
         }
+    }
+
+    pub fn can_borrow_many(&self, pins: &[u8]) -> bool {
+        for pin in pins {
+            if !self.can_borrow_one(*pin) {
+                return false;
+            }
+        }
+
+        true
     }
 
     pub fn borrow_many(&mut self, pins: Vec<u8>) -> Result<Uuid, GpioError> {
