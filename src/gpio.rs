@@ -42,9 +42,7 @@ impl Display for GpioError {
             GpioError::LeaseNotFound => format!("specified lease does not exist"),
             GpioError::PermissionDenied(s) => format!("permission denied: {}", s),
             GpioError::Panic(s) => format!("panic: {}", s),
-        });
-
-        std::fmt::Result::Ok(())
+        })
     }
 }
 

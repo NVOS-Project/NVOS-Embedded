@@ -5,12 +5,13 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use unbox_box::BoxExt;
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
 pub enum DeviceError {
     NotFound(Uuid),
     MissingController(String),
     DuplicateController,
-    HardwareError
+    HardwareError,
+    Other(String)
 }
 
 impl Display for DeviceError {
@@ -19,10 +20,9 @@ impl Display for DeviceError {
             DeviceError::NotFound(id) => format!("device with address {} is not registered", id),
             DeviceError::MissingController(name) => format!("bus controller \"{}\" was unavailable", name),
             DeviceError::DuplicateController => format!("controller of the same type is already registered"),
-            DeviceError::HardwareError => format!("a hardware error has occurred")
-        });
-
-        std::fmt::Result::Ok(())
+            DeviceError::HardwareError => format!("a hardware error has occurred"),
+            DeviceError::Other(desc) => format!("an unknown error has occurred: {}", desc)
+        })
     }
 }
 

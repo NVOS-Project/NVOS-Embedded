@@ -26,8 +26,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let gpio_borrow = GpioBorrowChecker::new_rc(pins);
     println!("Building device server");
     let device_server = DeviceServerBuilder::configure()
-        .add_bus(RawBusController::new(&gpio_borrow)?)
-        .build()?;
+        .add_bus(RawBusController::new(&gpio_borrow).expect("failed to build RawBusController"))
+        .build()
+        .expect("failed to build device server");
 
     // TODO: add gRPC stuff
     println!("Server running!");

@@ -7,3 +7,4 @@ pub trait BusController: Any {
 
 // Bus implementations
 pub mod raw; // RawBusController
+pub mod i2c; // I2CBusController
