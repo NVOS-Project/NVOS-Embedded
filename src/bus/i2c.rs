@@ -77,27 +77,29 @@ impl BusController for I2CBusController {
     }
 }
 
-fn check_pin_config(pin_config: &HashMap<u8, I2CPinDefinition>) -> bool {
-    for (bus_id, i2c_pin_def) in pin_config {
-        for (other_bus_id, other_i2c_pin_def) in pin_config {
-            if bus_id != other_bus_id && i2c_pin_def.0 == other_i2c_pin_def.0
-                || i2c_pin_def.1 == other_i2c_pin_def.1
-            {
-                return false;
-            }
-        }
-    }
-
-    true
-}
-
 impl I2CBusController {
     pub fn new(gpio_borrow: &Rc<RefCell<GpioBorrowChecker>>, pin_config: HashMap<u8, I2CPinDefinition>) -> Result<Self, I2CError> {        
+        let gpio_checker = gpio_borrow.borrow();
+
         for (bus_id, definition) in &pin_config {
             if definition.0 == definition.1 {
                 return Err(I2CError::InvalidConfig(
                     format!("I2C bus is attempting to use the same pin twice: bus {} -> (SDA: {}. SCL: {})",
                     bus_id, definition.0, definition.1
+                )));
+            }
+
+            if !gpio_checker.has_pin(definition.0) {
+                return Err(I2CError::InvalidConfig(
+                    format!("I2C bus is attempting to use invalid pin: bus {} pin {} (SDA)",
+                    bus_id, definition.0
+                )));
+            }
+
+            if !gpio_checker.has_pin(definition.1) {
+                return Err(I2CError::InvalidConfig(
+                    format!("I2C bus is attempting to use invalid pin: bus {} pin {} (SCL)",
+                    bus_id, definition.1
                 )));
             }
 
