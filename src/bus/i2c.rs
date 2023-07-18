@@ -55,7 +55,7 @@ impl I2cInfo {
 
 fn rppal_map_err(err: Error, default_err_msg: &str) -> I2CError {
     match err {
-        Error::Io(_) => I2CError::HardwareError("I/O error".to_string()),
+        Error::Io(e) => I2CError::HardwareError(format!("I/O error: {}", e)),
         Error::InvalidSlaveAddress(addr) => I2CError::InvalidAddress(addr),
         Error::FeatureNotSupported => I2CError::NotSupported,
         _ => I2CError::Other(default_err_msg.to_string())
@@ -121,6 +121,10 @@ impl I2CBusController {
     }
 
     fn open(&mut self, bus_id: u8) -> Result<Rc<RefCell<I2c>>, I2CError> {
+        if self.owned_buses.contains_key(&bus_id) {
+            return Err(I2CError::Busy);
+        }
+
         let definition = match self.pin_config.get(&bus_id) {
             Some(v) => v,
             None => return Err(I2CError::BusNotFound(bus_id))
