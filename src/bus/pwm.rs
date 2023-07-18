@@ -93,7 +93,7 @@ impl PWMBusController {
     }
 
     pub fn open(&mut self, channel: u8) -> Result<Pwm, PWMError> {
-        if !self.owned_channels.contains_key(&channel) {
+        if self.owned_channels.contains_key(&channel) {
             return Err(PWMError::Busy);
         }
 

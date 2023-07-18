@@ -7,21 +7,29 @@ use std::rc::Rc;
 use uuid::Uuid;
 use rppal::i2c::{I2c, Error};
 
-pub struct I2CPinDefinition(u8, u8);
+pub struct I2CPinDefinition {
+    sda: u8,
+    scl: u8
+}
+
 impl I2CPinDefinition {
+    pub fn new(sda: u8, scl: u8) -> Self {
+        I2CPinDefinition { sda, scl }
+    }
+
     pub fn overlap(&self, other: &Self) -> bool {
-        self.0 == other.0 ||
-        self.1 == other.1 ||
-        self.0 == other.1 ||
-        self.1 == other.0
+        self.sda == other.sda ||
+        self.scl == other.scl ||
+        self.sda == other.scl ||
+        self.scl == other.sda
     }
 
     pub fn to_vec(&self) -> Vec<u8> {
-        vec![self.0, self.1]
+        vec![self.sda, self.scl]
     }
 
     pub fn to_arr(&self) -> [u8; 2] {
-        [self.0, self.1]
+        [self.sda, self.scl]
     }
 }
 
@@ -44,11 +52,11 @@ pub enum I2CError {
 }
 
 impl I2cInfo {
-    pub fn new(bus_id: u8, lease_id: Uuid, bus: I2c) -> Self {
+    fn new(bus_id: u8, lease_id: Uuid, bus: I2c) -> Self {
         Self::with_rc(bus_id, lease_id, Rc::new(RefCell::new(bus)))
     }
 
-    pub fn with_rc(bus_id: u8, lease_id: Uuid, bus: Rc<RefCell<I2c>>) -> Self {
+    fn with_rc(bus_id: u8, lease_id: Uuid, bus: Rc<RefCell<I2c>>) -> Self {
         I2cInfo { bus_id, lease_id, bus }
     }
 }
@@ -82,24 +90,24 @@ impl I2CBusController {
         let gpio_checker = gpio_borrow.borrow();
 
         for (bus_id, definition) in &pin_config {
-            if definition.0 == definition.1 {
+            if definition.sda == definition.scl {
                 return Err(I2CError::InvalidConfig(
                     format!("I2C bus is attempting to use the same pin twice: bus {} -> (SDA: {}. SCL: {})",
-                    bus_id, definition.0, definition.1
+                    bus_id, definition.sda, definition.scl
                 )));
             }
 
-            if !gpio_checker.has_pin(definition.0) {
+            if !gpio_checker.has_pin(definition.sda) {
                 return Err(I2CError::InvalidConfig(
                     format!("I2C bus is attempting to use invalid pin: bus {} pin {} (SDA)",
-                    bus_id, definition.0
+                    bus_id, definition.sda
                 )));
             }
 
-            if !gpio_checker.has_pin(definition.1) {
+            if !gpio_checker.has_pin(definition.scl) {
                 return Err(I2CError::InvalidConfig(
                     format!("I2C bus is attempting to use invalid pin: bus {} pin {} (SCL)",
-                    bus_id, definition.1
+                    bus_id, definition.scl
                 )));
             }
 
@@ -107,7 +115,7 @@ impl I2CBusController {
                 if bus_id != other_bus_id && definition.overlap(other_definition) {
                     return Err(I2CError::InvalidConfig(
                         format!("I2C bus pin definitions overlap: bus {} -> (SDA: {}, SCL: {}) with bus {} -> (SDA: {}, SCL: {})",
-                        bus_id, definition.0, definition.1, other_bus_id, other_definition.0, other_definition.1
+                        bus_id, definition.sda, definition.scl, other_bus_id, other_definition.sda, other_definition.scl
                     )));
                 }
             }
