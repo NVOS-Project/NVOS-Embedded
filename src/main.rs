@@ -1,4 +1,5 @@
 mod device;
+mod capabilities;
 mod bus;
 mod gpio;
 mod tests;

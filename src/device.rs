@@ -1,9 +1,42 @@
 use uuid::Uuid;
 use crate::bus::BusController;
+use crate::capabilities::Capability;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Display;
 use unbox_box::BoxExt;
+pub trait Device : Any  {
+    fn load(&self, parent: &DeviceServer, address: Uuid) -> Result<(), DeviceError>;
+    fn unload(&self) -> Result<(), DeviceError>;
+    fn as_any(&self) -> &dyn Any;
+}
+
+pub struct DeviceBox {
+    device: Box<dyn Device>
+}
+
+impl DeviceBox {
+    pub fn new(device: Box<dyn Device>) -> Self {
+        DeviceBox { device }
+    }
+
+    pub fn as_any(&self) -> &dyn Any {
+        self.device.as_any()
+    }
+
+    pub fn as_ref(&self) -> &dyn Device {
+        self.device.unbox_ref()
+    }
+
+    pub fn as_capability<T: Capability + 'static>(&self) -> Option<&T> {
+        let device = self.device.as_any();
+        device.downcast_ref::<T>()
+    }
+
+    pub fn has_capability<T: Capability + 'static>(&self) -> bool {
+        self.as_capability::<T>().is_some()
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub enum DeviceError {
@@ -25,16 +58,9 @@ impl Display for DeviceError {
         })
     }
 }
-
-pub trait Device : Any  {
-    fn load(&self, parent: &DeviceServer) -> Result<(), DeviceError>;
-    fn unload(&self) -> Result<(), DeviceError>;
-    fn as_any(&self) -> &dyn Any;
-}
-
 pub struct DeviceServer {
     bus_controllers: Vec<Box<dyn BusController>>,
-    devices: HashMap<Uuid, Box<dyn Device>>
+    devices: HashMap<Uuid, DeviceBox>
 }
 
 pub struct DeviceServerBuilder {
@@ -83,9 +109,9 @@ impl DeviceServer {
     }
 
     pub fn register_device(&mut self, device: Box<dyn Device>) -> Result<Uuid, DeviceError> {
-        device.load(self)?;
         let id = Uuid::new_v4();
-        self.devices.insert(id, device);
+        device.load(self, id)?;
+        self.devices.insert(id, DeviceBox::new(device));
         Ok(id)
     }
 
@@ -94,7 +120,7 @@ impl DeviceServer {
             return Err(DeviceError::NotFound(device_id.to_owned()));
         }
 
-        let device = self.devices.get(device_id).unwrap();
+        let device = self.devices.get(device_id).unwrap().as_ref();
         device.unload()?;
         self.devices.remove(device_id);
         Ok(())
@@ -125,10 +151,10 @@ impl DeviceServer {
         self.get_bus::<T>().is_some()
     }
 
-    pub fn get_device(&self, address: &Uuid) -> Option<&dyn Device> {
+    pub fn get_device(&self, address: &Uuid) -> Option<&DeviceBox> {
         for (id, device) in &self.devices {
             if id == address {
-                return Some(device.unbox_ref());
+                return Some(device);
             }
         }
 
