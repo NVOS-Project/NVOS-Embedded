@@ -10,7 +10,7 @@ use unbox_box::BoxExt;
 pub trait Device : Any  {
     fn load(&mut self, parent: Rc<RefCell<DeviceServer>>, address: Uuid) -> Result<(), DeviceError>;
     fn unload(&mut self) -> Result<(), DeviceError>;
-    fn as_any_ref(&self) -> &dyn Any;
+    fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
@@ -24,7 +24,7 @@ impl DeviceBox {
     }
 
     pub fn as_any(&self) -> &dyn Any {
-        self.device.as_any_ref()
+        self.device.as_any()
     }
 
     pub fn as_ref(&self) -> &dyn Device {
@@ -36,7 +36,7 @@ impl DeviceBox {
     }
 
     pub fn as_capability_ref<T: Capability + 'static>(&self) -> Option<&T> {
-        let device = self.device.as_any_ref();
+        let device = self.device.as_any();
         device.downcast_ref::<T>()
     }
 
@@ -130,7 +130,7 @@ impl DeviceServer {
 
     pub fn register_device(&mut self, mut device: Box<dyn Device>) -> Result<Uuid, DeviceError> {
         let id = Uuid::new_v4();
-        device.load(self.get_strong_ptr(), id)?;
+        device.load(self.get_self_ptr(), id)?;
         self.devices.insert(id, DeviceBox::new(device));
         Ok(id)
     }
@@ -148,7 +148,7 @@ impl DeviceServer {
 
     pub fn register_bus(&mut self, bus: Box<dyn BusController>) -> Result<(), DeviceError> {
         for controller in &self.bus_controllers {
-            if bus.as_any_ref().type_id() == controller.as_any_ref().type_id() {
+            if bus.as_any().type_id() == controller.as_any().type_id() {
                 return Err(DeviceError::DuplicateController);
             }
         }
@@ -159,7 +159,7 @@ impl DeviceServer {
 
     pub fn get_bus<T: BusController>(&self) -> Option<&T> {
         for controller in &self.bus_controllers {
-            if let Some(controller) = controller.as_any_ref().downcast_ref::<T>() {
+            if let Some(controller) = controller.as_any().downcast_ref::<T>() {
                 return Some(controller);
             }
         }
@@ -205,11 +205,8 @@ impl DeviceServer {
         self.get_device(address).is_some()
     }
 
-    fn get_strong_ptr(&self) -> Rc<RefCell<Self>> {
-        self.get_weak_ptr().upgrade().expect("object was disposed")
-    }
-
-    fn get_weak_ptr(&self) -> Weak<RefCell<Self>> {
-        self.self_ptr.clone().expect("self pointer not set")
+    fn get_self_ptr(&self) -> Rc<RefCell<Self>> {
+        let ptr_ref = self.self_ptr.as_ref().expect("self pointer not set");
+        ptr_ref.upgrade().expect("object was disposed")
     }
 }
