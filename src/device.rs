@@ -2,13 +2,16 @@ use uuid::Uuid;
 use crate::bus::BusController;
 use crate::capabilities::Capability;
 use std::any::Any;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::rc::{Rc, Weak};
 use unbox_box::BoxExt;
 pub trait Device : Any  {
-    fn load(&self, parent: &DeviceServer, address: Uuid) -> Result<(), DeviceError>;
-    fn unload(&self) -> Result<(), DeviceError>;
-    fn as_any(&self) -> &dyn Any;
+    fn load(&mut self, parent: Rc<RefCell<DeviceServer>>, address: Uuid) -> Result<(), DeviceError>;
+    fn unload(&mut self) -> Result<(), DeviceError>;
+    fn as_any_ref(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 pub struct DeviceBox {
@@ -21,20 +24,29 @@ impl DeviceBox {
     }
 
     pub fn as_any(&self) -> &dyn Any {
-        self.device.as_any()
+        self.device.as_any_ref()
     }
 
     pub fn as_ref(&self) -> &dyn Device {
         self.device.unbox_ref()
     }
 
-    pub fn as_capability<T: Capability + 'static>(&self) -> Option<&T> {
-        let device = self.device.as_any();
+    pub fn as_mut(&mut self) -> &mut dyn Device {
+        self.device.unbox_mut()
+    }
+
+    pub fn as_capability_ref<T: Capability + 'static>(&self) -> Option<&T> {
+        let device = self.device.as_any_ref();
         device.downcast_ref::<T>()
     }
 
+    pub fn as_capability_mut<T: Capability + 'static>(&mut self) -> Option<&mut T> {
+        let device = self.device.as_any_mut();
+        device.downcast_mut::<T>()
+    }
+
     pub fn has_capability<T: Capability + 'static>(&self) -> bool {
-        self.as_capability::<T>().is_some()
+        self.as_capability_ref::<T>().is_some()
     }
 }
 
@@ -60,7 +72,8 @@ impl Display for DeviceError {
 }
 pub struct DeviceServer {
     bus_controllers: Vec<Box<dyn BusController>>,
-    devices: HashMap<Uuid, DeviceBox>
+    devices: HashMap<Uuid, DeviceBox>,
+    self_ptr: Option<Weak<RefCell<Self>>>
 }
 
 pub struct DeviceServerBuilder {
@@ -86,8 +99,9 @@ impl DeviceServerBuilder {
         self
     }
 
-    pub fn build(mut self) -> Result<DeviceServer, DeviceError> {
-        let mut s = DeviceServer::new();
+    pub fn build(mut self) -> Result<Rc<RefCell<DeviceServer>>, DeviceError> {
+        let server = DeviceServer::new();
+        let mut s = server.borrow_mut();
         while let Some(bus) = self.bus_controllers.pop() {
             s.register_bus(bus)?;
         }
@@ -96,21 +110,27 @@ impl DeviceServerBuilder {
             s.register_device(device)?;
         }
 
-        Ok(s)
+        drop(s);
+        Ok(server)
     }
 }
 
 impl DeviceServer {
-    pub fn new() -> Self {
-        DeviceServer { 
+    pub fn new() -> Rc<RefCell<Self>> {
+        let mut server = DeviceServer { 
             bus_controllers: Vec::new(),
-            devices: HashMap::new()
-        }
+            devices: HashMap::new(),
+            self_ptr: None
+        };
+
+        let rc = Rc::new(RefCell::new(server));
+        rc.borrow_mut().self_ptr = Some(Rc::downgrade(&rc));
+        rc
     }
 
-    pub fn register_device(&mut self, device: Box<dyn Device>) -> Result<Uuid, DeviceError> {
+    pub fn register_device(&mut self, mut device: Box<dyn Device>) -> Result<Uuid, DeviceError> {
         let id = Uuid::new_v4();
-        device.load(self, id)?;
+        device.load(self.get_strong_ptr(), id)?;
         self.devices.insert(id, DeviceBox::new(device));
         Ok(id)
     }
@@ -120,7 +140,7 @@ impl DeviceServer {
             return Err(DeviceError::NotFound(device_id.to_owned()));
         }
 
-        let device = self.devices.get(device_id).unwrap().as_ref();
+        let device = self.devices.get_mut(device_id).unwrap().as_mut();
         device.unload()?;
         self.devices.remove(device_id);
         Ok(())
@@ -128,7 +148,7 @@ impl DeviceServer {
 
     pub fn register_bus(&mut self, bus: Box<dyn BusController>) -> Result<(), DeviceError> {
         for controller in &self.bus_controllers {
-            if bus.as_any().type_id() == controller.as_any().type_id() {
+            if bus.as_any_ref().type_id() == controller.as_any_ref().type_id() {
                 return Err(DeviceError::DuplicateController);
             }
         }
@@ -139,7 +159,17 @@ impl DeviceServer {
 
     pub fn get_bus<T: BusController>(&self) -> Option<&T> {
         for controller in &self.bus_controllers {
-            if let Some(controller) = controller.as_any().downcast_ref::<T>() {
+            if let Some(controller) = controller.as_any_ref().downcast_ref::<T>() {
+                return Some(controller);
+            }
+        }
+
+        None
+    }
+
+    pub fn get_bus_mut<T: BusController>(&mut self) -> Option<&mut T> {
+        for controller in &mut self.bus_controllers {
+            if let Some(controller) = controller.as_any_mut().downcast_mut::<T>() {
                 return Some(controller);
             }
         }
@@ -161,7 +191,25 @@ impl DeviceServer {
         None
     }
 
+    pub fn get_device_mut(&mut self, address: &Uuid) -> Option<&mut DeviceBox> {
+        for (id, device) in &mut self.devices {
+            if id == address {
+                return Some(device);
+            }
+        }
+
+        None
+    }
+
     pub fn has_device(&self, address: &Uuid) -> bool {
         self.get_device(address).is_some()
+    }
+
+    fn get_strong_ptr(&self) -> Rc<RefCell<Self>> {
+        self.get_weak_ptr().upgrade().expect("object was disposed")
+    }
+
+    fn get_weak_ptr(&self) -> Weak<RefCell<Self>> {
+        self.self_ptr.clone().expect("self pointer not set")
     }
 }
