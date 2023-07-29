@@ -2,7 +2,7 @@ use intertrait::CastFrom;
 use intertrait::cast::{CastRef, CastMut};
 use uuid::Uuid;
 use crate::bus::BusController;
-use crate::capabilities::Capability;
+use crate::capabilities::{Capability, CapabilityId};
 use std::any::Any;
 use std::cell::{RefCell, Ref, RefMut};
 use std::collections::HashMap;
@@ -17,12 +17,18 @@ pub trait Device : CastFrom  {
 }
 
 pub struct DeviceBox {
-    device: Box<dyn Device>
+    device: Box<dyn Device>,
+    capabilities: Vec<CapabilityId>
 }
 
 impl DeviceBox {
     pub fn new(device: Box<dyn Device>) -> Self {
-        DeviceBox { device }
+        let cap_data = match device.cast::<dyn Capability>() {
+            Some(cap) => cap.get_capabilities(),
+            None => Vec::new(),
+        };
+
+        DeviceBox { device: device, capabilities: cap_data }
     }
 
     pub fn as_any(&self) -> &dyn Any {
@@ -49,6 +55,10 @@ impl DeviceBox {
 
     pub fn has_capability<T: Capability + 'static + ?Sized>(&self) -> bool {
         self.as_capability_ref::<T>().is_some()
+    }
+
+    pub fn get_capabilities(&self) -> Vec<CapabilityId> {
+        self.capabilities.clone()
     }
 }
 
