@@ -3,11 +3,11 @@ use intertrait::cast::{CastRef, CastMut};
 use uuid::Uuid;
 use crate::bus::BusController;
 use crate::capabilities::Capability;
-use std::any::{Any, TypeId};
+use std::any::Any;
 use std::cell::{RefCell, Ref, RefMut};
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use unbox_box::BoxExt;
 pub trait Device : CastFrom  {
     fn load(&mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError>;

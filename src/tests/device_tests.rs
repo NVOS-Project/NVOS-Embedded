@@ -93,12 +93,12 @@ struct SleepyDevice {
 }
 
 impl Device for NoCapDevice {
-    fn load(&mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
+    fn load(&mut self, _parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
         self.address = Some(address);
         Ok(())
     }
 
-    fn unload(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError> {
+    fn unload(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
         self.address = None;
         Ok(())
     }
@@ -131,7 +131,7 @@ impl Device for FunDevice {
         Ok(())
     }
 
-    fn unload(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError> {
+    fn unload(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
         self.address = None;
         Ok(())
     }
@@ -183,12 +183,12 @@ impl FunDevice {
 
 impl Device for SleepyDevice {
     fn load(
-        &mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
+        &mut self, _parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
         self.address = Some(address);
         Ok(())
     }
 
-    fn unload(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError> {
+    fn unload(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
         self.address = None;
         Ok(())
     }
@@ -336,7 +336,7 @@ fn device_as_capability() {
 
     let id = server.register_device(Box::new(SleepyDevice::new())).expect("failed to register device");
     let device = server.get_device(&id).expect("failed to get device");
-    let sleepy = device.as_capability_ref::<dyn SleepCapable>().expect("failed to cast device");
+    device.as_capability_ref::<dyn SleepCapable>().expect("failed to cast device");
 }
 
 #[test]
@@ -404,13 +404,13 @@ fn ds_bus_ptr_ref_eq() {
         .add_device(SleepyDevice::new())
         .build().expect("failed to build server");
 
-    let mut stub1 = server.get_bus_ptr::<StubController>().expect("failed to get stub ptr");
-    let mut stub2 = server.get_bus_ptr::<StubController>().expect("failed to get stub ptr");
+    let stub1 = server.get_bus_ptr::<StubController>().expect("failed to get stub ptr");
+    let stub2 = server.get_bus_ptr::<StubController>().expect("failed to get stub ptr");
     assert_eq!(Rc::strong_count(&stub1), Rc::strong_count(&stub2));
     assert!(Rc::ptr_eq(&stub1, &stub2));
 
-    let mut fun1 = server.get_bus_ptr::<FunController>().expect("failed to get fun ptr");
-    let mut fun2 = server.get_bus_ptr::<FunController>().expect("failed to get fun ptr");
+    let fun1 = server.get_bus_ptr::<FunController>().expect("failed to get fun ptr");
+    let fun2 = server.get_bus_ptr::<FunController>().expect("failed to get fun ptr");
     assert_eq!(Rc::strong_count(&fun1), Rc::strong_count(&fun2));
     assert!(Rc::ptr_eq(&fun1, &fun2));
 
@@ -426,10 +426,10 @@ fn ds_bus_ptr_ref_eq() {
 
     // prevent memory leak
     unsafe {
-        stub1 = Rc::from_raw(stub1_ptr as *const RefCell<StubController>);
-        stub2 = Rc::from_raw(stub2_ptr as *const RefCell<StubController>);
-        fun1 = Rc::from_raw(fun1_ptr as *const RefCell<FunController>);
-        fun2 = Rc::from_raw(fun2_ptr as *const RefCell<FunController>);
+        Rc::from_raw(stub1_ptr as *const RefCell<StubController>);
+        Rc::from_raw(stub2_ptr as *const RefCell<StubController>);
+        Rc::from_raw(fun1_ptr as *const RefCell<FunController>);
+        Rc::from_raw(fun2_ptr as *const RefCell<FunController>);
     }
 }
 
