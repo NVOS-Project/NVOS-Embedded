@@ -3,8 +3,9 @@ mod device;
 mod capabilities;
 mod bus;
 mod gpio;
+mod rpc;
 
-use std::{error::Error, collections::HashMap};
+use std::{error::Error, collections::HashMap, sync::{RwLock, Arc}};
 use bus::raw::RawBusController;
 use gpio::{GpioBorrowChecker, PinState};
 use device::DeviceServerBuilder;
