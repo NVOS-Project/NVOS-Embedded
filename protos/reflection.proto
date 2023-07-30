@@ -1,0 +1,32 @@
+syntax = "proto3";
+package reflection;
+
+import "void.proto";
+
+enum CapabilityId {
+    Dummy = 0;
+}
+
+message Device {
+    string Address = 1;
+    repeated CapabilityId Capabilities = 2;
+}
+
+message BusController {
+    string Name = 1;
+}
+
+message ListDevicesResponse {
+    uint32 Count = 1;
+    repeated Device Devices = 2;
+}
+
+message ListControllersResponse {
+    uint32 Count = 1;
+    repeated BusController Controllers = 2;
+}
+
+service DeviceReflection {
+    rpc ListDevices (void.Void) returns (ListDevicesResponse);
+    rpc ListControllers (void.Void) returns (ListControllersResponse);
+}

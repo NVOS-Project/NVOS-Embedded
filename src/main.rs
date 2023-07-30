@@ -1,8 +1,8 @@
+mod tests;
 mod device;
 mod capabilities;
 mod bus;
 mod gpio;
-mod tests;
 
 use std::{error::Error, collections::HashMap};
 use bus::raw::RawBusController;
