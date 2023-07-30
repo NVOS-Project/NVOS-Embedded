@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use rppal::uart::{Uart, Parity, Error};
 use uuid::Uuid;
 use std::any::Any;
@@ -97,7 +98,7 @@ impl UARTBusController {
     }
 
     pub fn with_internals(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, internal_ports: HashMap<u8, UARTDefinition>) -> Result<Self, UARTError> {
-        let gpio_checker = gpio_borrow.read().unwrap();
+        let gpio_checker = gpio_borrow.read();
 
         for (id, definition) in &internal_ports {
             if definition.rx == definition.tx {
@@ -148,7 +149,7 @@ impl UARTBusController {
             return Err(UARTError::Busy);
         }
 
-        let mut borrow_checker = self.gpio_borrow.write().unwrap();
+        let mut borrow_checker = self.gpio_borrow.write();
         if !borrow_checker.can_borrow_many(&definition.to_arr()) {
             return Err(UARTError::Busy);
         }
@@ -202,7 +203,7 @@ impl UARTBusController {
 
         if info.lease_id.is_some() {
             // Internal port, needs to be released.
-            let mut borrow_checker = self.gpio_borrow.write().unwrap();
+            let mut borrow_checker = self.gpio_borrow.write();
             borrow_checker.release(&info.lease_id.unwrap())
                 .map_err(|err| UARTError::HardwareError(err.to_string()))?;    
         }

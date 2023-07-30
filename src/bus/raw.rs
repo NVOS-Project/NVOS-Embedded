@@ -2,7 +2,8 @@ use crate::bus::BusController;
 use crate::gpio::{GpioBorrowChecker, GpioError};
 use std::any::Any;
 use std::collections::HashMap;
-use std::sync::{RwLock, Arc};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use uuid::Uuid;
 use rppal::gpio::{Gpio, Pin, InputPin, OutputPin, IoPin, Error, Mode};
 
@@ -98,13 +99,13 @@ impl RawBusController {
             None => return Err(GpioError::LeaseNotFound)
         };
 
-        self.gpio_borrow.write().unwrap().release(id)?;
+        self.gpio_borrow.write().release(id)?;
         self.owned_pins.remove(&pin);
         Ok(())
     }
     
     fn borrow_pin(&mut self, pin_id: u8) -> Result<Pin, GpioError> {
-        let mut borrow_checker = self.gpio_borrow.write().unwrap();
+        let mut borrow_checker = self.gpio_borrow.write();
         let bcm_id = borrow_checker.get(&pin_id)?.bcm_id();
 
         if !borrow_checker.can_borrow_one(pin_id) {

@@ -1,8 +1,8 @@
 use crate::bus::BusController;
 use crate::gpio::GpioBorrowChecker;
-use std::sync::{RwLock, Mutex};
 use std::{any::Any, sync::Arc};
 use std::collections::HashMap;
+use parking_lot::{Mutex, RwLock};
 use uuid::Uuid;
 use rppal::i2c::{I2c, Error};
 
@@ -89,7 +89,7 @@ impl BusController for I2CBusController {
 
 impl I2CBusController {
     pub fn new(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, pin_config: HashMap<u8, I2CPinDefinition>) -> Result<Self, I2CError> {        
-        let gpio_checker = gpio_borrow.read().unwrap();
+        let gpio_checker = gpio_borrow.read();
 
         for (bus_id, definition) in &pin_config {
             if definition.sda == definition.scl {
@@ -140,7 +140,7 @@ impl I2CBusController {
             None => return Err(I2CError::BusNotFound(bus_id))
         };
 
-        let mut borrow_checker = self.gpio_borrow.write().unwrap();
+        let mut borrow_checker = self.gpio_borrow.write();
         if !borrow_checker.can_borrow_many(&definition.to_arr()) {
             return Err(I2CError::Busy);
         }
@@ -173,7 +173,7 @@ impl I2CBusController {
             None => return Err(I2CError::LeaseNotFound)
         };
 
-        let mut borrow_checker = self.gpio_borrow.write().unwrap();
+        let mut borrow_checker = self.gpio_borrow.write();
         borrow_checker.release(&info.lease_id)
             .map_err(|err| I2CError::HardwareError(err.to_string()))?;
 

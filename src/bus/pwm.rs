@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::sync::{RwLock, Arc};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use rppal::pwm::{Channel, Pwm, Error};
 use uuid::Uuid;
 use std::any::Any;
@@ -60,7 +61,7 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> PWMError {
 
 impl PWMBusController {
     pub fn new(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, pin_config: HashMap<u8, u8>) -> Result<Self, PWMError> {
-        let gpio_checker = gpio_borrow.read().unwrap();
+        let gpio_checker = gpio_borrow.read();
 
         for (channel, pin) in &pin_config {
             if u8_to_channel(*channel).is_none() {
@@ -103,7 +104,7 @@ impl PWMBusController {
             None => return Err(PWMError::ChannelUnavailable(channel))
         };
 
-        let mut borrow_checker = self.gpio_borrow.write().unwrap();
+        let mut borrow_checker = self.gpio_borrow.write();
         if !borrow_checker.can_borrow_one(*pin) {
             return Err(PWMError::Busy);
         }
@@ -124,7 +125,7 @@ impl PWMBusController {
             None => return Err(PWMError::LeaseNotFound)
         };
 
-        self.gpio_borrow.write().unwrap().release(id)
+        self.gpio_borrow.write().release(id)
             .map_err(|err| PWMError::HardwareError(err.to_string()))?;
         self.owned_channels.remove(&channel);
         Ok(())
