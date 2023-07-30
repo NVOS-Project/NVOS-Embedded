@@ -427,10 +427,10 @@ fn ds_bus_ptr_ref_eq() {
 
     // prevent memory leak
     unsafe {
-        Arc::from_raw(stub1_ptr as *const RefCell<StubController>);
-        Arc::from_raw(stub2_ptr as *const RefCell<StubController>);
-        Arc::from_raw(fun1_ptr as *const RefCell<FunController>);
-        Arc::from_raw(fun2_ptr as *const RefCell<FunController>);
+        Arc::from_raw(stub1_ptr as *const RwLock<StubController>);
+        Arc::from_raw(stub2_ptr as *const RwLock<StubController>);
+        Arc::from_raw(fun1_ptr as *const RwLock<FunController>);
+        Arc::from_raw(fun2_ptr as *const RwLock<FunController>);
     }
 }
 
