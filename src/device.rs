@@ -1,4 +1,4 @@
-use intertrait::CastFrom;
+use intertrait::CastFromSync;
 use intertrait::cast::{CastRef, CastMut};
 use uuid::Uuid;
 use crate::bus::BusController;
@@ -8,8 +8,9 @@ use std::cell::{RefCell, Ref, RefMut};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 use unbox_box::BoxExt;
-pub trait Device : CastFrom  {
+pub trait Device : CastFromSync  {
     fn load(&mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError>;
     fn unload(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError>;
     fn as_any(&self) -> &dyn Any;
@@ -83,12 +84,12 @@ impl Display for DeviceError {
     }
 }
 pub struct DeviceServer {
-    bus_controllers: Vec<Rc<RefCell<dyn BusController>>>,
+    bus_controllers: Vec<Arc<RwLock<dyn BusController>>>,
     devices: HashMap<Uuid, DeviceBox>
 }
 
 pub struct DeviceServerBuilder {
-    bus_controllers: Vec<Rc<RefCell<dyn BusController>>>,
+    bus_controllers: Vec<Arc<RwLock<dyn BusController>>>,
     devices: Vec<Box<dyn Device>>
 }
 

@@ -1,8 +1,8 @@
-use intertrait::CastFrom;
+use intertrait::CastFromSync;
 use intertrait::cast::CastRef;
 use strum::{EnumIter, IntoEnumIterator};
 
-pub trait Capability : CastFrom {
+pub trait Capability : CastFromSync {
     fn get_capabilities(&self) -> Vec<CapabilityId> {
         let mut capabilities = Vec::<CapabilityId>::new();
         for capability in CapabilityId::iter() {
