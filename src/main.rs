@@ -3,7 +3,7 @@ mod device;
 mod capabilities;
 mod bus;
 mod gpio;
-mod rpc;
+//mod rpc;
 
 use std::{error::Error, collections::HashMap, sync::{RwLock, Arc}};
 use bus::raw::RawBusController;
@@ -25,7 +25,7 @@ fn load_pin_config() -> Result<HashMap<u8, PinState>, Box<dyn Error>> {
 async fn main() -> Result<(), Box<dyn Error>> {
     println!("Building GPIO borrow checker");
     let pins = load_pin_config()?;
-    let gpio_borrow = GpioBorrowChecker::new_rc(pins);
+    let gpio_borrow = GpioBorrowChecker::new_arc(pins);
     println!("Building device server");
     let device_server = DeviceServerBuilder::configure()
         .add_bus(RawBusController::new(&gpio_borrow).expect("failed to build RawBusController"))

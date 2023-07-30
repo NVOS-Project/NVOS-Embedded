@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, cell::RefCell, fmt::Display};
+use std::{collections::HashMap, rc::Rc, cell::RefCell, fmt::Display, sync::{Arc, RwLock}};
 use uuid::Uuid;
 
 pub struct PinState {
@@ -61,6 +61,10 @@ impl GpioBorrowChecker {
 
     pub fn new_rc(pins: HashMap<u8, PinState>) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(GpioBorrowChecker::new(pins)))
+    }
+
+    pub fn new_arc(pins: HashMap<u8, PinState>) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(GpioBorrowChecker::new(pins)))
     }
 
     pub fn get(&self, pin: &u8) -> Result<&PinState, GpioError> {

@@ -1,7 +1,6 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 use rppal::uart::{Uart, Parity, Error};
 use uuid::Uuid;
 use std::any::Any;
@@ -63,7 +62,7 @@ pub enum UARTError {
 }
 
 pub struct UARTBusController {
-    gpio_borrow: Rc<RefCell<GpioBorrowChecker>>,
+    gpio_borrow: Arc<RwLock<GpioBorrowChecker>>,
     owned_ports: HashMap<String, UartInfo>,
     internal_ports: HashMap<u8, UARTDefinition>
 }
@@ -89,7 +88,7 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> UARTError {
 }
 
 impl UARTBusController {
-    pub fn new(gpio_borrow: &Rc<RefCell<GpioBorrowChecker>>) -> Self {
+    pub fn new(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>) -> Self {
         UARTBusController { 
             gpio_borrow: gpio_borrow.clone(), 
             owned_ports: HashMap::new(), 
@@ -97,8 +96,8 @@ impl UARTBusController {
         }
     }
 
-    pub fn with_internals(gpio_borrow: &Rc<RefCell<GpioBorrowChecker>>, internal_ports: HashMap<u8, UARTDefinition>) -> Result<Self, UARTError> {
-        let gpio_checker = gpio_borrow.borrow();
+    pub fn with_internals(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, internal_ports: HashMap<u8, UARTDefinition>) -> Result<Self, UARTError> {
+        let gpio_checker = gpio_borrow.read().unwrap();
 
         for (id, definition) in &internal_ports {
             if definition.rx == definition.tx {
@@ -149,7 +148,7 @@ impl UARTBusController {
             return Err(UARTError::Busy);
         }
 
-        let mut borrow_checker = self.gpio_borrow.borrow_mut();
+        let mut borrow_checker = self.gpio_borrow.write().unwrap();
         if !borrow_checker.can_borrow_many(&definition.to_arr()) {
             return Err(UARTError::Busy);
         }
@@ -203,7 +202,7 @@ impl UARTBusController {
 
         if info.lease_id.is_some() {
             // Internal port, needs to be released.
-            let mut borrow_checker = self.gpio_borrow.borrow_mut();
+            let mut borrow_checker = self.gpio_borrow.write().unwrap();
             borrow_checker.release(&info.lease_id.unwrap())
                 .map_err(|err| UARTError::HardwareError(err.to_string()))?;    
         }
