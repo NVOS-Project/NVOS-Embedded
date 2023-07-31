@@ -1,9 +1,9 @@
 use crate::bus::BusController;
 use crate::gpio::{GpioBorrowChecker, GpioError};
 use std::any::Any;
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
+use parking_lot::RwLock;
 use uuid::Uuid;
 use rppal::gpio::{Gpio, Pin, InputPin, OutputPin, IoPin, Error, Mode};
 
@@ -30,7 +30,7 @@ pub enum OutputMode {
 
 pub struct RawBusController {
     gpio_controller: Gpio,
-    gpio_borrow: Rc<RefCell<GpioBorrowChecker>>,
+    gpio_borrow: Arc<RwLock<GpioBorrowChecker>>,
     owned_pins: HashMap<u8, Uuid>
 }
 
@@ -47,7 +47,7 @@ impl BusController for RawBusController {
 }
 
 impl RawBusController {
-    pub fn new(gpio_borrow: &Rc<RefCell<GpioBorrowChecker>>) -> Result<Self, GpioError> {
+    pub fn new(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>) -> Result<Self, GpioError> {
         let gpio = Gpio::new()
         .map_err(|err| rppal_map_err(err, "Internal RPPAL error while initializing Gpio interface"))?;
         
@@ -99,13 +99,13 @@ impl RawBusController {
             None => return Err(GpioError::LeaseNotFound)
         };
 
-        self.gpio_borrow.borrow_mut().release(id)?;
+        self.gpio_borrow.write().release(id)?;
         self.owned_pins.remove(&pin);
         Ok(())
     }
     
     fn borrow_pin(&mut self, pin_id: u8) -> Result<Pin, GpioError> {
-        let mut borrow_checker = self.gpio_borrow.borrow_mut();
+        let mut borrow_checker = self.gpio_borrow.write();
         let bcm_id = borrow_checker.get(&pin_id)?.bcm_id();
 
         if !borrow_checker.can_borrow_one(pin_id) {

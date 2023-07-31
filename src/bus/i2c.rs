@@ -1,9 +1,8 @@
 use crate::bus::BusController;
 use crate::gpio::GpioBorrowChecker;
-use std::any::Any;
-use std::cell::RefCell;
+use std::{any::Any, sync::Arc};
 use std::collections::HashMap;
-use std::rc::Rc;
+use parking_lot::{Mutex, RwLock};
 use uuid::Uuid;
 use rppal::i2c::{I2c, Error};
 
@@ -36,7 +35,7 @@ impl I2CPinDefinition {
 struct I2cInfo {
     bus_id: u8,
     lease_id: Uuid,
-    bus: Rc<RefCell<I2c>>
+    bus: Arc<Mutex<I2c>>
 }
 
 #[derive(Debug, PartialEq)]
@@ -53,10 +52,10 @@ pub enum I2CError {
 
 impl I2cInfo {
     fn new(bus_id: u8, lease_id: Uuid, bus: I2c) -> Self {
-        Self::with_rc(bus_id, lease_id, Rc::new(RefCell::new(bus)))
+        Self::with_rc(bus_id, lease_id, Arc::new(Mutex::new(bus)))
     }
 
-    fn with_rc(bus_id: u8, lease_id: Uuid, bus: Rc<RefCell<I2c>>) -> Self {
+    fn with_rc(bus_id: u8, lease_id: Uuid, bus: Arc<Mutex<I2c>>) -> Self {
         I2cInfo { bus_id, lease_id, bus }
     }
 }
@@ -71,7 +70,7 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> I2CError {
 }
 
 pub struct I2CBusController {
-    gpio_borrow: Rc<RefCell<GpioBorrowChecker>>,
+    gpio_borrow: Arc<RwLock<GpioBorrowChecker>>,
     pin_config: HashMap<u8, I2CPinDefinition>,
     owned_buses: HashMap<u8, I2cInfo>
 }
@@ -89,8 +88,8 @@ impl BusController for I2CBusController {
 }
 
 impl I2CBusController {
-    pub fn new(gpio_borrow: &Rc<RefCell<GpioBorrowChecker>>, pin_config: HashMap<u8, I2CPinDefinition>) -> Result<Self, I2CError> {        
-        let gpio_checker = gpio_borrow.borrow();
+    pub fn new(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, pin_config: HashMap<u8, I2CPinDefinition>) -> Result<Self, I2CError> {        
+        let gpio_checker = gpio_borrow.read();
 
         for (bus_id, definition) in &pin_config {
             if definition.sda == definition.scl {
@@ -131,7 +130,7 @@ impl I2CBusController {
         })
     }
 
-    fn open(&mut self, bus_id: u8) -> Result<Rc<RefCell<I2c>>, I2CError> {
+    fn open(&mut self, bus_id: u8) -> Result<Arc<Mutex<I2c>>, I2CError> {
         if self.owned_buses.contains_key(&bus_id) {
             return Err(I2CError::Busy);
         }
@@ -141,7 +140,7 @@ impl I2CBusController {
             None => return Err(I2CError::BusNotFound(bus_id))
         };
 
-        let mut borrow_checker = self.gpio_borrow.borrow_mut();
+        let mut borrow_checker = self.gpio_borrow.write();
         if !borrow_checker.can_borrow_many(&definition.to_arr()) {
             return Err(I2CError::Busy);
         }
@@ -158,7 +157,7 @@ impl I2CBusController {
         Ok(result)
     }
 
-    pub fn get(&mut self, bus_id: u8) -> Result<Rc<RefCell<I2c>>, I2CError> {
+    pub fn get(&mut self, bus_id: u8) -> Result<Arc<Mutex<I2c>>, I2CError> {
         let res = self.owned_buses.get(&bus_id);
         let bus = match res {
             Some(info) => info.bus.clone(),
@@ -174,7 +173,7 @@ impl I2CBusController {
             None => return Err(I2CError::LeaseNotFound)
         };
 
-        let mut borrow_checker = self.gpio_borrow.borrow_mut();
+        let mut borrow_checker = self.gpio_borrow.write();
         borrow_checker.release(&info.lease_id)
             .map_err(|err| I2CError::HardwareError(err.to_string()))?;
 

@@ -1,11 +1,12 @@
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::bus::BusController;
 use crate::capabilities::Capability;
 use crate::device::{Device, DeviceError, DeviceServer, DeviceServerBuilder};
 use intertrait::cast_to;
+use parking_lot::RwLock;
 use uuid::Uuid;
 
 struct StubController {}
@@ -85,7 +86,7 @@ struct NoCapDevice {
 }
 struct FunDevice {
     address: Option<Uuid>,
-    fun_controller: Option<Rc<RefCell<FunController>>>
+    fun_controller: Option<Arc<RwLock<FunController>>>
 }
 struct SleepyDevice {
     address: Option<Uuid>,
@@ -148,7 +149,7 @@ impl Device for FunDevice {
 #[cast_to]
 impl FunCapable for FunDevice {
     fn have_fun(&mut self) -> String {
-        let mut controller = self.fun_controller.as_ref().expect("device not initialized").borrow_mut();
+        let mut controller = self.fun_controller.as_ref().expect("device not initialized").write();
 
         let fun_count = match controller.increase_fun() {
             Some(c) => c,
@@ -167,7 +168,7 @@ impl FunCapable for FunDevice {
     }
 
     fn how_much_fun(&self) -> u32 {
-        let controller = self.fun_controller.as_ref().expect("device not initialized").borrow();
+        let controller = self.fun_controller.as_ref().expect("device not initialized").read();
         controller.get_fun_count()
     }
 }
@@ -251,10 +252,10 @@ fn ds_build_manual() {
     assert_eq!(server.get_buses().len(), 0);
     assert_eq!(server.get_devices().len(), 0);
 
-    server.register_bus(Rc::new(RefCell::new(FunController::new()))).expect("failed to register bus");
+    server.register_bus(Arc::new(RwLock::new(FunController::new()))).expect("failed to register bus");
     assert_eq!(server.get_buses().len(), 1);
 
-    server.register_bus(Rc::new(RefCell::new(FunController::new()))).expect_err("duplicate bus check failed");
+    server.register_bus(Arc::new(RwLock::new(FunController::new()))).expect_err("duplicate bus check failed");
     assert_eq!(server.get_buses().len(), 1);
 
     let id = server.register_device(Box::new(NoCapDevice::new())).expect("failed to add NoCapDevice");
@@ -406,18 +407,18 @@ fn ds_bus_ptr_ref_eq() {
 
     let stub1 = server.get_bus_ptr::<StubController>().expect("failed to get stub ptr");
     let stub2 = server.get_bus_ptr::<StubController>().expect("failed to get stub ptr");
-    assert_eq!(Rc::strong_count(&stub1), Rc::strong_count(&stub2));
-    assert!(Rc::ptr_eq(&stub1, &stub2));
+    assert_eq!(Arc::strong_count(&stub1), Arc::strong_count(&stub2));
+    assert!(Arc::ptr_eq(&stub1, &stub2));
 
     let fun1 = server.get_bus_ptr::<FunController>().expect("failed to get fun ptr");
     let fun2 = server.get_bus_ptr::<FunController>().expect("failed to get fun ptr");
-    assert_eq!(Rc::strong_count(&fun1), Rc::strong_count(&fun2));
-    assert!(Rc::ptr_eq(&fun1, &fun2));
+    assert_eq!(Arc::strong_count(&fun1), Arc::strong_count(&fun2));
+    assert!(Arc::ptr_eq(&fun1, &fun2));
 
-    let stub1_ptr = Rc::into_raw(stub1) as *const RefCell<dyn BusController>;
-    let stub2_ptr = Rc::into_raw(stub2) as *const RefCell<dyn BusController>;
-    let fun1_ptr = Rc::into_raw(fun1) as *const RefCell<dyn BusController>;
-    let fun2_ptr = Rc::into_raw(fun2) as *const RefCell<dyn BusController>;
+    let stub1_ptr = Arc::into_raw(stub1) as *const RwLock<dyn BusController>;
+    let stub2_ptr = Arc::into_raw(stub2) as *const RwLock<dyn BusController>;
+    let fun1_ptr = Arc::into_raw(fun1) as *const RwLock<dyn BusController>;
+    let fun2_ptr = Arc::into_raw(fun2) as *const RwLock<dyn BusController>;
 
     assert_eq!(stub1_ptr, stub2_ptr);
     assert_eq!(fun1_ptr, fun2_ptr);
@@ -426,10 +427,10 @@ fn ds_bus_ptr_ref_eq() {
 
     // prevent memory leak
     unsafe {
-        Rc::from_raw(stub1_ptr as *const RefCell<StubController>);
-        Rc::from_raw(stub2_ptr as *const RefCell<StubController>);
-        Rc::from_raw(fun1_ptr as *const RefCell<FunController>);
-        Rc::from_raw(fun2_ptr as *const RefCell<FunController>);
+        Arc::from_raw(stub1_ptr as *const RwLock<StubController>);
+        Arc::from_raw(stub2_ptr as *const RwLock<StubController>);
+        Arc::from_raw(fun1_ptr as *const RwLock<FunController>);
+        Arc::from_raw(fun2_ptr as *const RwLock<FunController>);
     }
 }
 
@@ -446,12 +447,12 @@ fn ds_bus_ptr_access() {
     let fun = server.get_bus_ptr::<FunController>().expect("failed to get fun ptr");
 
     // test stub
-    assert_eq!(stub.borrow().name(), "STUB");
-    assert_eq!(stub.borrow().do_thing(), "hello");
+    assert_eq!(stub.read().name(), "STUB");
+    assert_eq!(stub.read().do_thing(), "hello");
 
     // test fun
-    assert_eq!(fun.borrow().name(), "FUN");
-    assert_eq!(fun.borrow().get_fun_count(), 0);
-    assert_eq!(fun.borrow_mut().increase_fun().unwrap(), 1);
-    assert_eq!(fun.borrow().get_fun_count(), 1);
+    assert_eq!(fun.read().name(), "FUN");
+    assert_eq!(fun.read().get_fun_count(), 0);
+    assert_eq!(fun.write().increase_fun().unwrap(), 1);
+    assert_eq!(fun.read().get_fun_count(), 1);
 }

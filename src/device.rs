@@ -1,15 +1,16 @@
-use intertrait::CastFrom;
+use intertrait::CastFromSync;
 use intertrait::cast::{CastRef, CastMut};
 use uuid::Uuid;
 use crate::bus::BusController;
 use crate::capabilities::{Capability, CapabilityId};
 use std::any::Any;
-use std::cell::{RefCell, Ref, RefMut};
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::rc::Rc;
+use std::sync::Arc;
 use unbox_box::BoxExt;
-pub trait Device : CastFrom  {
+use parking_lot::{RwLock, RwLockReadGuard, MappedRwLockReadGuard, RwLockWriteGuard, MappedRwLockWriteGuard};
+
+pub trait Device : CastFromSync  {
     fn load(&mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError>;
     fn unload(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError>;
     fn as_any(&self) -> &dyn Any;
@@ -83,12 +84,12 @@ impl Display for DeviceError {
     }
 }
 pub struct DeviceServer {
-    bus_controllers: Vec<Rc<RefCell<dyn BusController>>>,
+    bus_controllers: Vec<Arc<RwLock<dyn BusController>>>,
     devices: HashMap<Uuid, DeviceBox>
 }
 
 pub struct DeviceServerBuilder {
-    bus_controllers: Vec<Rc<RefCell<dyn BusController>>>,
+    bus_controllers: Vec<Arc<RwLock<dyn BusController>>>,
     devices: Vec<Box<dyn Device>>
 }
 
@@ -106,7 +107,7 @@ impl DeviceServerBuilder {
     }
 
     pub fn add_bus<T: BusController>(mut self, bus: T) -> Self {
-        self.bus_controllers.push(Rc::new(RefCell::new(bus)));
+        self.bus_controllers.push(Arc::new(RwLock::new(bus)));
         self
     }
 
@@ -155,9 +156,11 @@ impl DeviceServer {
         }
     }
 
-    pub fn register_bus(&mut self, bus: Rc<RefCell<dyn BusController>>) -> Result<(), DeviceError> {
+    pub fn register_bus(&mut self, bus: Arc<RwLock<dyn BusController>>) -> Result<(), DeviceError> {
         for controller in &self.bus_controllers {
-            if bus.borrow().as_any().type_id() == controller.borrow().as_any().type_id() {
+            let t1 = bus.read().as_any().type_id();
+            let t2 = controller.read().as_any().type_id();
+            if t1 == t2 {
                 return Err(DeviceError::DuplicateController);
             }
         }
@@ -166,36 +169,36 @@ impl DeviceServer {
         Ok(())
     }
 
-    pub fn get_bus<T: BusController>(&self) -> Option<Ref<'_, T>> {
+    pub fn get_bus<T: BusController>(&self) -> Option<MappedRwLockReadGuard<'_, T>> {
         for controller in &self.bus_controllers {
-            let r = controller.borrow();
+            let r = controller.read();
             if (*r).as_any().is::<T>() {
-                return Some(Ref::map(r, |x| x.as_any().downcast_ref::<T>().unwrap()));
+                return Some(RwLockReadGuard::map(r, |x| x.as_any().downcast_ref::<T>().unwrap()));
             }
         }
 
         None
     }
 
-    pub fn get_bus_mut<T: BusController>(&self) -> Option<RefMut<'_, T>> {
+    pub fn get_bus_mut<T: BusController>(&self) -> Option<MappedRwLockWriteGuard<'_, T>> {
         for controller in &self.bus_controllers {
-            let r = controller.borrow_mut();
+            let r = controller.write();
             if (*r).as_any().is::<T>() {
-                return Some(RefMut::map(r, |x| x.as_any_mut().downcast_mut::<T>().unwrap()));
+                return Some(RwLockWriteGuard::map(r, |x| x.as_any_mut().downcast_mut::<T>().unwrap()));
             }
         }
 
         None
     }
 
-    pub fn get_bus_ptr<T: BusController + 'static>(&self) -> Option<Rc<RefCell<T>>> {
+    pub fn get_bus_ptr<T: BusController + 'static>(&self) -> Option<Arc<RwLock<T>>> {
         for controller in &self.bus_controllers {
-            let _sanity_check = (*controller.borrow()).as_any().is::<T>();
+            let _sanity_check = (*controller.read()).as_any().is::<T>();
             if _sanity_check {
-                let rc = Rc::clone(controller);
+                let arc = Arc::clone(controller);
                 unsafe {
-                    let rc_cast = Rc::from_raw(Rc::into_raw(rc) as *const RefCell<T>);
-                    return Some(rc_cast);
+                    let arc_cast = Arc::from_raw(Arc::into_raw(arc) as *const RwLock<T>);
+                    return Some(arc_cast);
                 }
             }
         }
@@ -203,13 +206,13 @@ impl DeviceServer {
         None
     }
 
-    pub fn get_buses(&self) -> Vec<Ref<'_, dyn BusController>> {
-        self.bus_controllers.iter().map(|c| c.borrow()).collect()
+    pub fn get_buses(&self) -> Vec<RwLockReadGuard<'_, dyn BusController>> {
+        self.bus_controllers.iter().map(|c| c.read()).collect()
     }
 
     pub fn has_bus<T: BusController>(&self) -> bool {
         for controller in &self.bus_controllers {
-            if controller.borrow().as_any().is::<T>() {
+            if controller.read().as_any().is::<T>() {
                 return true;
             }
         }
