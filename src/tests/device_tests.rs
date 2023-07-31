@@ -94,6 +94,10 @@ struct SleepyDevice {
 }
 
 impl Device for NoCapDevice {
+    fn name(&self) -> String {
+        "nocap".to_string()
+    }
+
     fn load(&mut self, _parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
         self.address = Some(address);
         Ok(())
@@ -122,6 +126,10 @@ impl NoCapDevice {
 }
 
 impl Device for FunDevice {
+    fn name(&self) -> String {
+        "fun".to_string()
+    }
+
     fn load(
         &mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
         self.address = Some(address);
@@ -183,6 +191,10 @@ impl FunDevice {
 }
 
 impl Device for SleepyDevice {
+    fn name(&self) -> String {
+        "sleepy".to_string()
+    }
+
     fn load(
         &mut self, _parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
         self.address = Some(address);
@@ -311,6 +323,63 @@ fn ds_get_device() {
     assert!(device.is_some());
     let device = device.unwrap();
     assert_eq!(device.as_ref().type_id(), TypeId::of::<NoCapDevice>());
+}
+
+#[test]
+fn ds_get_buses() {
+    let mut bus_names = vec!["STUB", "FUN"];
+    let mut server = DeviceServerBuilder::configure()
+        .add_bus(FunController::new())
+        .add_bus(StubController::new())
+        .add_device(NoCapDevice::new())
+        .add_device(FunDevice::new())
+        .add_device(SleepyDevice::new())
+        .build().expect("failed to build server");
+
+    for bus in server.get_buses() {
+        let bus_name = bus.name();
+            if bus_names.len() == 0 {
+                panic!("all expected bus names have been seen but get_buses returned another bus: {}", &bus_name);
+            }
+    
+            if let Some(index) = bus_names.iter().position(|&name| name == bus_name) {
+                bus_names.remove(index);
+            } else {
+                panic!("duplicate bus returned: {}", &bus_name);
+            }
+        }
+    
+        if !bus_names.is_empty() {
+            panic!("expected buses not returned by the server: {:?}", &bus_names);
+        }
+}
+
+#[test]
+fn ds_get_devices() {
+    let mut device_names = vec!["nocap", "fun", "sleepy"];
+    let mut server = DeviceServerBuilder::configure()
+        .add_bus(FunController::new())
+        .add_device(NoCapDevice::new())
+        .add_device(FunDevice::new())
+        .add_device(SleepyDevice::new())
+        .build().expect("failed to build server");
+
+        for (_, device) in server.get_devices() {
+            let device_name = device.as_ref().name();
+            if device_names.len() == 0 {
+                panic!("all expected device names have been seen but get_devices returned another device: {}", &device_name);
+            }
+    
+            if let Some(index) = device_names.iter().position(|&name| name == device_name) {
+                device_names.remove(index);
+            } else {
+                panic!("duplicate device returned: {}", &device_name);
+            }
+        }
+    
+        if !device_names.is_empty() {
+            panic!("expected devices not returned by the server: {:?}", &device_names);
+        }
 }
 
 #[test]

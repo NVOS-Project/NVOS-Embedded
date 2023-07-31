@@ -11,6 +11,7 @@ use unbox_box::BoxExt;
 use parking_lot::{RwLock, RwLockReadGuard, MappedRwLockReadGuard, RwLockWriteGuard, MappedRwLockWriteGuard};
 
 pub trait Device : CastFromSync  {
+    fn name(&self) -> String;
     fn load(&mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError>;
     fn unload(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError>;
     fn as_any(&self) -> &dyn Any;
