@@ -63,28 +63,22 @@ impl ConfigSectionGPIO {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DeviceConfig {
     pub driver: String,
-    pub data: HashMap<String, Value>
+    pub data: Value
 }
 
 impl DeviceConfig {
-    pub fn new(driver: String, data: HashMap<String, Value>) -> Self {
+    pub fn new(driver: String, data: Value) -> Self {
         Self { driver, data }
     }
 
     pub fn new_without_data(driver: String) -> Self {
-        Self { driver, data: HashMap::new() }
+        Self { driver, data: Value::Null }
     }
 
     pub fn validate(&self) -> Result<(), ConfigError> {
         if self.driver.trim().is_empty() {
             return Err(ConfigError::InvalidEntry("invalid device config: driver name cannot be empty".to_string()));
         }
-
-        for (key, _) in &self.data {
-            if key.trim().is_empty() {
-                return Err(ConfigError::InvalidEntry("invalid device data: key cannot be empty".to_string()));
-            }
-        } 
 
         Ok(())
     }
@@ -112,28 +106,22 @@ impl ConfigSectionDevices {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BusControllerConfig {
     pub name: String,
-    pub data: HashMap<String, Value>
+    pub data: Value
 }
 
 impl BusControllerConfig {
-    pub fn new(bus: String, data: HashMap<String, Value>) -> Self {
+    pub fn new(bus: String, data: Value) -> Self {
         Self { name: bus, data }
     }
 
     pub fn new_without_data(bus: String) -> Self {
-        Self { name: bus, data: HashMap::new() }
+        Self { name: bus, data: Value::Null }
     }
 
     pub fn validate(&self) -> Result<(), ConfigError> {
         if self.name.trim().is_empty() {
             return Err(ConfigError::InvalidEntry("invalid bus controller config: bus name cannot be empty".to_string()));
         }
-
-        for (key, _) in &self.data {
-            if key.trim().is_empty() {
-                return Err(ConfigError::InvalidEntry("invalid bus controller data: key cannot be empty".to_string()));
-            }
-        } 
 
         Ok(())
     }
