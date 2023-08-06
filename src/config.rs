@@ -9,6 +9,7 @@ pub enum ConfigError {
     SerializeError(String),
     InvalidEntry(String),
     MissingEntry(String),
+    DuplicateEntry(String),
     Other(String)
 }
 
@@ -18,6 +19,7 @@ impl Display for ConfigError {
             ConfigError::SerializeError(msg) => format!("serialize/parse error: {}", msg),
             ConfigError::InvalidEntry(msg) => format!("invalid config entry: {}", msg),
             ConfigError::MissingEntry(msg) => format!("missing config entry: {}", msg),
+            ConfigError::DuplicateEntry(msg) => format!("duplicate config entry: {}", msg),
             ConfigError::Other(msg) => format!("config error: {}", msg)
         })
     }
@@ -38,20 +40,20 @@ impl ConfigSectionGPIO {
         let mut known_bcm_ids = Vec::new();
 
         for (id, bcm) in &self.pin_config {
-            if known_pin_ids.contains(id) {
+            if known_pin_ids.contains(&id) {
                 return Err(ConfigError::InvalidEntry(
                     format!("invalid pin configuration: ({} -> {}), pin ID {} is defined more than once", id, bcm, bcm)
                 ));
             }
 
-            if known_bcm_ids.contains(bcm) {
+            if known_bcm_ids.contains(&bcm) {
                 return Err(ConfigError::InvalidEntry(
                     format!("invalid pin configuration: ({} -> {}), pin BCM ID {} is defined more than once", id, bcm, bcm)
                 ));
             }
 
-            known_pin_ids.push(id.clone());
-            known_bcm_ids.push(bcm.clone());
+            known_pin_ids.push(id);
+            known_bcm_ids.push(bcm);
         }
 
         Ok(())
@@ -109,21 +111,21 @@ impl ConfigSectionDevices {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BusControllerConfig {
-    pub bus: String,
+    pub name: String,
     pub data: HashMap<String, Value>
 }
 
 impl BusControllerConfig {
     pub fn new(bus: String, data: HashMap<String, Value>) -> Self {
-        Self { bus, data }
+        Self { name: bus, data }
     }
 
     pub fn new_without_data(bus: String) -> Self {
-        Self { bus, data: HashMap::new() }
+        Self { name: bus, data: HashMap::new() }
     }
 
     pub fn validate(&self) -> Result<(), ConfigError> {
-        if self.bus.trim().is_empty() {
+        if self.name.trim().is_empty() {
             return Err(ConfigError::InvalidEntry("invalid bus controller config: bus name cannot be empty".to_string()));
         }
 
@@ -148,6 +150,15 @@ impl ConfigSectionControllers {
     }
 
     pub fn validate(&self) -> Result<(), ConfigError> {
+        let mut seen_names = Vec::new();
+        for name in self.controllers.iter().map(|x| &x.name) {
+            if seen_names.contains(&name) {
+                return Err(ConfigError::DuplicateEntry(format!("bus controller {} is defined more than once", name)));
+            }
+
+            seen_names.push(name);
+        }
+
         for bus in &self.controllers {
             bus.validate()?;
         }
