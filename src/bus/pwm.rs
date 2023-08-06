@@ -11,7 +11,7 @@ use crate::bus::BusController;
 #[derive(Debug, PartialEq)]
 pub enum PWMError {
     InvalidConfig(String),
-    ChannelUnavailable(u8),
+    ChannelNotFound(u8),
     LeaseNotFound,
     NotSupported,
     ChannelBusy(u8),
@@ -23,7 +23,7 @@ impl Display for PWMError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&match self {
             PWMError::InvalidConfig(msg) => format!("invalid config: {}", msg),
-            PWMError::ChannelUnavailable(channel_id) => format!("pwm channel {} is not available", channel_id),
+            PWMError::ChannelNotFound(channel_id) => format!("pwm channel {} does not exist", channel_id),
             PWMError::LeaseNotFound => format!("pwm channel is not open"),
             PWMError::NotSupported => format!("not supported"),
             PWMError::ChannelBusy(channel_id) => format!("pwm channel {} is busy", channel_id),
@@ -116,7 +116,7 @@ impl PWMBusController {
 
         let pin = match self.pin_config.get(&channel) {
             Some(p) => p,
-            None => return Err(PWMError::ChannelUnavailable(channel))
+            None => return Err(PWMError::ChannelNotFound(channel))
         };
 
         let mut borrow_checker = self.gpio_borrow.write();

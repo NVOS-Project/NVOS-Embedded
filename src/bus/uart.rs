@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::Path;
 use std::sync::Arc;
 use parking_lot::RwLock;
@@ -60,6 +61,20 @@ pub enum UARTError {
     HardwareError(String),
     NotSupported,
     Other(String)
+}
+
+impl Display for UARTError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&match self {
+            UARTError::InvalidConfig(msg) => format!("invalid config: {}", msg),
+            UARTError::PortNotFound => format!("specified internal UART channel does not exist"),
+            UARTError::LeaseNotFound => format!("specified internal UART channel is not open"),
+            UARTError::Busy => format!("UART channel is busy"),
+            UARTError::HardwareError(msg) => format!("hardware error: {}", msg),
+            UARTError::NotSupported => format!("not supported"),
+            UARTError::Other(msg) => format!("{}", msg),
+        })
+    }
 }
 
 pub struct UARTBusController {
