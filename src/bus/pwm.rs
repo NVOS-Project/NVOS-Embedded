@@ -6,6 +6,7 @@ use rppal::pwm::{Channel, Pwm, Error};
 use serde_json::Value;
 use uuid::Uuid;
 use std::any::Any;
+use log::warn;
 use crate::config::{BusControllerConfig, ConfigError};
 use crate::gpio::{GpioBorrowChecker, GpioError};
 use crate::bus::BusController;
@@ -36,7 +37,7 @@ impl Display for PWMError {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct PWMConfigData {
     channels: HashMap<u8, u8>
 }
@@ -123,10 +124,20 @@ impl PWMBusController {
         })
     }
 
-    pub fn from_config(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, config: &BusControllerConfig) -> Result<Self, PWMError> {
+    pub fn from_config(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, config: &mut BusControllerConfig) -> Result<Self, PWMError> {
         let data: PWMConfigData = match serde_json::from_value(config.data.clone()) {
             Ok(d) => d,
             Err(e) => {
+                if config.data == Value::Null {
+                    config.data = match serde_json::to_value(PWMConfigData::default()) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            warn!("Failed to write default configuration: {}", e);
+                            Value::Null
+                        }
+                    };
+                }
+                
                 return Err(PWMError::InvalidConfig(
                     ConfigError::SerializeError(format!("invalid PWM data struct json: {}", e)).to_string()
                 ));

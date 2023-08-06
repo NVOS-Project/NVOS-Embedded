@@ -1,7 +1,9 @@
 use crate::bus::BusController;
 use crate::gpio::GpioBorrowChecker;
 use crate::config::{BusControllerConfig, ConfigError};
+use log::warn;
 use serde::{Serialize, Deserialize};
+use serde_json::Value;
 use std::fmt::Display;
 use std::{any::Any, sync::Arc};
 use std::collections::HashMap;
@@ -88,7 +90,7 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> I2CError {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct I2cConfigData {
     channels: HashMap<u8, I2CPinDefinition>
 }
@@ -160,10 +162,20 @@ impl I2CBusController {
         })
     }
 
-    pub fn from_config(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, config: &BusControllerConfig) -> Result<Self, I2CError> {
+    pub fn from_config(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, config: &mut BusControllerConfig) -> Result<Self, I2CError> {
         let data: I2cConfigData = match serde_json::from_value(config.data.clone()) {
             Ok(d) => d,
             Err(e) => {
+                if config.data == Value::Null {
+                    config.data = match serde_json::to_value(I2cConfigData::default()) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            warn!("Failed to write default configuration: {}", e);
+                            Value::Null
+                        }
+                    };
+                }
+                
                 return Err(I2CError::InvalidConfig(
                     ConfigError::SerializeError(format!("invalid I2C data struct json: {}", e)).to_string()
                 ));

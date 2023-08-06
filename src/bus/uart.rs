@@ -2,8 +2,10 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::Path;
 use std::sync::Arc;
+use log::{warn, debug};
 use parking_lot::RwLock;
 use rppal::uart::{Uart, Parity, Error};
+use serde_json::Value;
 use uuid::Uuid;
 use std::any::Any;
 use crate::gpio::GpioBorrowChecker;
@@ -107,7 +109,7 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> UARTError {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct UARTConfigData {
     internal_ports: Option<HashMap<u8, UARTDefinition>>
 }
@@ -131,6 +133,8 @@ impl UARTBusController {
         let gpio_checker = gpio_borrow.read();
 
         for (id, definition) in &internal_ports {
+            debug!("Processing definition {}: path={}, rx={}, tx={}", id, definition.path, definition.rx, definition.tx);
+
             if !Path::new(definition.path.as_str()).exists() {
                 return Err(UARTError::InvalidConfig(
                     format!("device path provided by UART port does not exist: {}", definition.path)
@@ -175,10 +179,29 @@ impl UARTBusController {
         })
     }
 
-    pub fn from_config(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, config: &BusControllerConfig) -> Result<Self, UARTError> {
+    pub fn from_config(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, config: &mut BusControllerConfig) -> Result<Self, UARTError> {
         let data: UARTConfigData = match serde_json::from_value(config.data.clone()) {
-            Ok(d) => d,
+            Ok(d) => {
+                let result = config.data.as_object().and_then(|x| Some(x.contains_key("internal_ports")));
+                if result.is_none() || !result.unwrap() {
+                    return Err(UARTError::InvalidConfig(
+                        ConfigError::MissingEntry(format!("invalid UART data struct json: missing required property \"internal_ports\"")).to_string()
+                    ));
+                }
+
+                d
+            },
             Err(e) => {
+                if config.data == Value::Null {
+                    config.data = match serde_json::to_value(UARTConfigData::default()) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            warn!("Failed to write default configuration: {}", e);
+                            Value::Null
+                        }
+                    };
+                }
+
                 return Err(UARTError::InvalidConfig(
                     ConfigError::SerializeError(format!("invalid UART data struct json: {}", e)).to_string()
                 ));

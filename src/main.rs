@@ -7,14 +7,13 @@ mod rpc;
 mod tests;
 
 use config::{ConfigError, Configuration};
-use device::DeviceServerBuilder;
+use device::DeviceServer;
 use gpio::{GpioBorrowChecker, PinState};
 use log::{error, info, warn, LevelFilter};
 use parking_lot::RwLock;
 use rpc::reflection::{device_reflection_server::DeviceReflectionServer, DeviceReflectionService};
 use simple_logger::SimpleLogger;
 use std::{
-    collections::HashMap,
     error::Error,
     fs::File,
     io::{BufReader, BufWriter},
@@ -22,6 +21,12 @@ use std::{
     sync::Arc,
 };
 use tonic::transport::Server;
+
+use bus::i2c::I2CBusController;
+use bus::pwm::PWMBusController;
+use bus::raw::RawBusController;
+use bus::uart::UARTBusController;
+use bus::BusController;
 
 const SERVE_ADDR: &str = "0.0.0.0:30000";
 const CONFIG_PATH: &str = "nvos_config.json";
@@ -34,7 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .init()?;
 
     info!("Loading configuration file at {}", CONFIG_PATH);
-    let config;
+    let mut config;
 
     if !Path::new(CONFIG_PATH).exists() {
         warn!("Config file does not exist or is inaccessible");
@@ -70,9 +75,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Building GPIO borrow checker");
     if config.gpio_section.pin_config.len() == 0 {
-        warn!("Config does not have any GPIO entires. This will not work.");
+        warn!("Config does not have any GPIO entries. This will not work.");
     }
-    
+
     let gpio_borrow = Arc::new(RwLock::new(GpioBorrowChecker::new(
         config
             .gpio_section
@@ -86,13 +91,73 @@ async fn main() -> Result<(), Box<dyn Error>> {
             })
             .collect(),
     )));
-    // TODO: build device server from config
-    println!("Building device server");
-    let device_server = Arc::new(RwLock::new(
-        DeviceServerBuilder::configure()
-            .build()
-            .expect("failed to build device server"),
-    ));
+
+    info!("Building server");
+    let mut device_server = DeviceServer::new();
+
+    info!("Registering bus controllers");
+    if config.controller_section.controllers.len() == 0 {
+        warn!("Config does not have any bus controller entries.");
+    }
+
+    for bus_config in &mut config.controller_section.controllers {
+        info!("Initializing bus controller \"{}\"", bus_config.name);
+        let controller_instance: Result<Arc<RwLock<dyn BusController>>, String> =
+            match bus_config.name.to_lowercase().as_str() {
+                "raw" => RawBusController::new(&gpio_borrow)
+                    .map(|bus| Arc::new(RwLock::new(bus)) as Arc<RwLock<dyn BusController>>)
+                    .map_err(|err| err.to_string()),
+                "pwm" => PWMBusController::from_config(&gpio_borrow, bus_config)
+                    .map(|bus| Arc::new(RwLock::new(bus)) as Arc<RwLock<dyn BusController>>)
+                    .map_err(|err| err.to_string()),
+                "uart" => UARTBusController::from_config(&gpio_borrow, bus_config)
+                    .map(|bus| Arc::new(RwLock::new(bus)) as Arc<RwLock<dyn BusController>>)
+                    .map_err(|err| err.to_string()),
+                "i2c" => I2CBusController::from_config(&gpio_borrow, bus_config)
+                    .map(|bus| Arc::new(RwLock::new(bus)) as Arc<RwLock<dyn BusController>>)
+                    .map_err(|err| err.to_string()),
+                unknown_bus => Err(format!(
+                    "Bus controller {} is not implemented by this server",
+                    unknown_bus
+                )),
+            };
+
+        match controller_instance {
+            Ok(b) => match device_server.register_bus(b) {
+                Ok(_) => info!("Bus controller \"{}\" is OK", bus_config.name),
+                Err(e) => error!(
+                    "Failed to register bus controller \"{}\": {}",
+                    bus_config.name, e
+                ),
+            },
+            Err(e) => error!(
+                "Failed to build bus controller \"{}\": {}",
+                bus_config.name, e
+            ),
+        }
+    }
+
+    info!("Registering devices");
+    if config.device_section.devices.len() == 0 {
+        warn!("Config does not have any device entries.");
+    }
+
+    // TODO: register the devices...
+
+    info!("Syncing config to disk");
+    match File::create(CONFIG_PATH) {
+        Ok(f) => {
+            let writer = BufWriter::new(f);
+            match config.to_writer(writer, true) {
+                Ok(_) => info!("Config file written to {}", CONFIG_PATH),
+                Err(e) => error!("Failed to write config file: {}", e),
+            };
+        }
+        Err(e) => error!("Failed to open config file for write: {}", e),
+    }
+    
+    // Prepare the device server for multi threading
+    let device_server = Arc::new(RwLock::new(device_server));
 
     // Serve gRPC
     let rpc_server = Server::builder()
@@ -102,7 +167,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )))
         .serve(String::from(SERVE_ADDR).parse().unwrap());
 
-    println!("Server running on {}!", SERVE_ADDR);
+    info!("Server running on {}!", SERVE_ADDR);
     rpc_server.await?;
     Ok(())
 }
