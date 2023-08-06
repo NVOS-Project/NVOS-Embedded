@@ -5,7 +5,7 @@ use parking_lot::RwLock;
 use rppal::pwm::{Channel, Pwm, Error};
 use uuid::Uuid;
 use std::any::Any;
-use crate::gpio::GpioBorrowChecker;
+use crate::gpio::{GpioBorrowChecker, GpioError};
 use crate::bus::BusController;
 
 #[derive(Debug, PartialEq)]
@@ -121,11 +121,15 @@ impl PWMBusController {
 
         let mut borrow_checker = self.gpio_borrow.write();
 
-        let borrow_id = borrow_checker.borrow_one(*pin)
-        .map_err(|err| PWMError::HardwareError(err.to_string()))?;
+        if !borrow_checker.can_borrow_one(*pin) {
+            return Err(PWMError::HardwareError(GpioError::Busy(*pin).to_string()));
+        }
 
         let bus = Pwm::new(u8_to_channel(channel).unwrap())
             .map_err(|err| rppal_map_err(err, &format!("Internal RPPAL error while opening PWM channel {}", channel)))?;
+
+            let borrow_id = borrow_checker.borrow_one(*pin)
+            .map_err(|err| PWMError::HardwareError(err.to_string()))?;
         
         self.owned_channels.insert(channel, borrow_id);
         Ok(bus)

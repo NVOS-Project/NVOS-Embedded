@@ -1,5 +1,6 @@
 use crate::bus::BusController;
-use crate::gpio::GpioBorrowChecker;
+use crate::gpio::{GpioBorrowChecker, GpioError};
+use std::fmt::Display;
 use std::{any::Any, sync::Arc};
 use std::collections::HashMap;
 use parking_lot::{Mutex, RwLock};
@@ -45,9 +46,24 @@ pub enum I2CError {
     LeaseNotFound,
     InvalidAddress(u16),
     NotSupported,
-    Busy,
+    ChannelBusy(u8),
     HardwareError(String),
     Other(String)
+}
+
+impl Display for I2CError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&match self {
+            I2CError::InvalidConfig(msg) => format!("invalid config: {}", msg),
+            I2CError::BusNotFound(channel_id) => format!("I2C channel {} does not exist", channel_id),
+            I2CError::LeaseNotFound => format!("specified I2C channel is not open"),
+            I2CError::InvalidAddress(device_address) => format!("invalid slave address: {}", device_address),
+            I2CError::NotSupported => format!("not supported"),
+            I2CError::ChannelBusy(channel_id) => format!("I2C channel {} is busy", channel_id),
+            I2CError::HardwareError(msg) => format!("hardware error: {}", msg),
+            I2CError::Other(msg) => format!("{}", msg),
+        })
+    }
 }
 
 impl I2cInfo {
@@ -132,7 +148,7 @@ impl I2CBusController {
 
     fn open(&mut self, bus_id: u8) -> Result<Arc<Mutex<I2c>>, I2CError> {
         if self.owned_buses.contains_key(&bus_id) {
-            return Err(I2CError::Busy);
+            return Err(I2CError::ChannelBusy(bus_id));
         }
 
         let definition = match self.pin_config.get(&bus_id) {
@@ -142,7 +158,7 @@ impl I2CBusController {
 
         let mut borrow_checker = self.gpio_borrow.write();
         if !borrow_checker.can_borrow_many(&definition.to_arr()) {
-            return Err(I2CError::Busy);
+            return Err(I2CError::HardwareError("I2C channel pins are already in use".to_string()));
         }
 
         let bus = I2c::with_bus(bus_id)

@@ -166,7 +166,7 @@ impl UARTBusController {
 
         let mut borrow_checker = self.gpio_borrow.write();
         if !borrow_checker.can_borrow_many(&definition.to_arr()) {
-            return Err(UARTError::Busy);
+            return Err(UARTError::HardwareError("internal UART channel pins are already in use".to_string()));
         }
 
         let uart = Uart::with_path(
