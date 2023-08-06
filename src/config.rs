@@ -185,10 +185,7 @@ impl Configuration {
         self.controller_section.validate()?;
         Ok(())
     }
-}
 
-pub struct JsonConfigurationReader;
-impl JsonConfigurationReader {
     pub fn from_reader<R: Read>(reader: R) -> Result<Configuration, ConfigError> {
         let config: Configuration = match serde_json::from_reader(reader) {
             Ok(c) => c,
@@ -206,16 +203,13 @@ impl JsonConfigurationReader {
     pub fn from_str(json_str: String) -> Result<Configuration, ConfigError> {
         Self::from_reader(json_str.as_bytes())        
     }
-}
 
-pub struct JsonConfigurationWriter;
-impl JsonConfigurationWriter {
-    pub fn to_writer<W: Write>(config: &Configuration, writer: W, pretty: bool) -> Result<(), ConfigError> {
+    pub fn to_writer<W: Write>(&self, writer: W, pretty: bool) -> Result<(), ConfigError> {
         let result;
         if pretty {
-            result = serde_json::to_writer_pretty(writer, config);
+            result = serde_json::to_writer_pretty(writer, self);
         } else {
-            result = serde_json::to_writer(writer, config);
+            result = serde_json::to_writer(writer, self);
         }
         
         match result {
@@ -226,12 +220,12 @@ impl JsonConfigurationWriter {
         }
     }
 
-    pub fn to_str(config: &Configuration, pretty: bool) -> Result<String, ConfigError> {
+    pub fn to_str(&self, pretty: bool) -> Result<String, ConfigError> {
         let result;
         if pretty {
-            result = serde_json::to_string_pretty(config);
+            result = serde_json::to_string_pretty(self);
         } else {
-            result = serde_json::to_string(config);
+            result = serde_json::to_string(self);
         }
 
         match result {

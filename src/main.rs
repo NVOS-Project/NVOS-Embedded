@@ -6,7 +6,7 @@ mod gpio;
 mod rpc;
 mod tests;
 
-use config::{ConfigError, Configuration, JsonConfigurationReader, JsonConfigurationWriter};
+use config::{ConfigError, Configuration};
 use device::DeviceServerBuilder;
 use gpio::{GpioBorrowChecker, PinState};
 use log::{error, info, warn, LevelFilter};
@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         match File::create(CONFIG_PATH) {
             Ok(f) => {
                 let writer = BufWriter::new(f);
-                match JsonConfigurationWriter::to_writer(&config, writer, true) {
+                match config.to_writer(writer, true) {
                     Ok(_) => info!("Config file written to {}", CONFIG_PATH),
                     Err(e) => error!("Failed to write config file: {}", e),
                 };
@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     } else {
         config = match File::open(CONFIG_PATH)
             .map_err(|err| ConfigError::Other(format!("failed to read config file: {}", err)))
-            .and_then(|f| JsonConfigurationReader::from_reader(BufReader::new(f)))
+            .and_then(|f| Configuration::from_reader(BufReader::new(f)))
         {
             Ok(c) => c,
             Err(e) => {
