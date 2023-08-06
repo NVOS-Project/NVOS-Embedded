@@ -16,6 +16,10 @@ intertrait = "0.2.2"
 linkme = "0.2.2"
 strum = { version = "0.25.0", features = ["strum_macros", "derive"] }
 parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }
+simple_logger = "4.2.0"
+log = "0.4.19"
+serde_json = "1.0.104"
+serde = { version = "1.0.180", features = ["derive"] }
 
 [build-dependencies]
 tonic-build = "0.9.2"
