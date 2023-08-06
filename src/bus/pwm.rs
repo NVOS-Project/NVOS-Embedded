@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use rppal::pwm::{Channel, Pwm, Error};
@@ -13,9 +14,23 @@ pub enum PWMError {
     ChannelUnavailable(u8),
     LeaseNotFound,
     NotSupported,
-    Busy,
+    ChannelBusy(u8),
     HardwareError(String),
     Other(String)
+}
+
+impl Display for PWMError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&match self {
+            PWMError::InvalidConfig(msg) => format!("invalid config: {}", msg),
+            PWMError::ChannelUnavailable(channel_id) => format!("pwm channel {} is not available", channel_id),
+            PWMError::LeaseNotFound => format!("pwm channel is not open"),
+            PWMError::NotSupported => format!("not supported"),
+            PWMError::ChannelBusy(channel_id) => format!("pwm channel {} is busy", channel_id),
+            PWMError::HardwareError(msg) => format!("hardware error: {}", msg),
+            PWMError::Other(msg) => format!("{}", msg),
+        })
+    }
 }
 
 pub struct PWMBusController {
@@ -96,7 +111,7 @@ impl PWMBusController {
 
     pub fn open(&mut self, channel: u8) -> Result<Pwm, PWMError> {
         if self.owned_channels.contains_key(&channel) {
-            return Err(PWMError::Busy);
+            return Err(PWMError::ChannelBusy(channel));
         }
 
         let pin = match self.pin_config.get(&channel) {
@@ -105,16 +120,13 @@ impl PWMBusController {
         };
 
         let mut borrow_checker = self.gpio_borrow.write();
-        if !borrow_checker.can_borrow_one(*pin) {
-            return Err(PWMError::Busy);
-        }
+
+        let borrow_id = borrow_checker.borrow_one(*pin)
+        .map_err(|err| PWMError::HardwareError(err.to_string()))?;
 
         let bus = Pwm::new(u8_to_channel(channel).unwrap())
             .map_err(|err| rppal_map_err(err, &format!("Internal RPPAL error while opening PWM channel {}", channel)))?;
         
-        let borrow_id = borrow_checker.borrow_one(*pin)
-            .map_err(|err| PWMError::HardwareError(err.to_string()))?;
-
         self.owned_channels.insert(channel, borrow_id);
         Ok(bus)
     }
