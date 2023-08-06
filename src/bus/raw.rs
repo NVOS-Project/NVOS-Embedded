@@ -1,4 +1,5 @@
 use crate::bus::BusController;
+use crate::config::BusControllerConfig;
 use crate::gpio::{GpioBorrowChecker, GpioError};
 use std::any::Any;
 use std::collections::HashMap;
@@ -56,6 +57,10 @@ impl RawBusController {
             gpio_borrow: gpio_borrow.clone(), 
             owned_pins: HashMap::new()
         })
+    }
+
+    pub fn from_config(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, config: &BusControllerConfig) -> Result<Self, GpioError> {
+        Self::new(gpio_borrow)
     }
 
     pub fn open_in(&mut self, pin: u8, mode: InputMode) -> Result<InputPin, GpioError> {

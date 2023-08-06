@@ -1,5 +1,7 @@
 use crate::bus::BusController;
-use crate::gpio::{GpioBorrowChecker, GpioError};
+use crate::gpio::GpioBorrowChecker;
+use crate::config::{BusControllerConfig, ConfigError};
+use serde::{Serialize, Deserialize};
 use std::fmt::Display;
 use std::{any::Any, sync::Arc};
 use std::collections::HashMap;
@@ -7,6 +9,7 @@ use parking_lot::{Mutex, RwLock};
 use uuid::Uuid;
 use rppal::i2c::{I2c, Error};
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct I2CPinDefinition {
     sda: u8,
     scl: u8
@@ -85,6 +88,17 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> I2CError {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct I2cConfigData {
+    channels: HashMap<u8, I2CPinDefinition>
+}
+
+impl I2cConfigData {
+    fn new(channels: HashMap<u8, I2CPinDefinition>) -> Self {
+        Self { channels }
+    }
+}
+
 pub struct I2CBusController {
     gpio_borrow: Arc<RwLock<GpioBorrowChecker>>,
     pin_config: HashMap<u8, I2CPinDefinition>,
@@ -144,6 +158,19 @@ impl I2CBusController {
             pin_config: pin_config, 
             owned_buses: HashMap::new()
         })
+    }
+
+    pub fn from_config(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, config: &BusControllerConfig) -> Result<Self, I2CError> {
+        let data: I2cConfigData = match serde_json::from_value(config.data.clone()) {
+            Ok(d) => d,
+            Err(e) => {
+                return Err(I2CError::InvalidConfig(
+                    ConfigError::SerializeError(format!("invalid I2C data struct json: {}", e)).to_string()
+                ));
+            }
+        };
+
+        Self::new(gpio_borrow, data.channels)
     }
 
     fn open(&mut self, bus_id: u8) -> Result<Arc<Mutex<I2c>>, I2CError> {

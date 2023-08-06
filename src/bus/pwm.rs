@@ -3,10 +3,13 @@ use std::fmt::Display;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use rppal::pwm::{Channel, Pwm, Error};
+use serde_json::Value;
 use uuid::Uuid;
 use std::any::Any;
+use crate::config::{BusControllerConfig, ConfigError};
 use crate::gpio::{GpioBorrowChecker, GpioError};
 use crate::bus::BusController;
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, PartialEq)]
 pub enum PWMError {
@@ -30,6 +33,17 @@ impl Display for PWMError {
             PWMError::HardwareError(msg) => format!("hardware error: {}", msg),
             PWMError::Other(msg) => format!("{}", msg),
         })
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct PWMConfigData {
+    channels: HashMap<u8, u8>
+}
+
+impl PWMConfigData {
+    fn new(channels: HashMap<u8, u8>) -> Self {
+        Self { channels }
     }
 }
 
@@ -107,6 +121,19 @@ impl PWMBusController {
             pin_config: pin_config, 
             owned_channels: HashMap::new()
         })
+    }
+
+    pub fn from_config(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, config: &BusControllerConfig) -> Result<Self, PWMError> {
+        let data: PWMConfigData = match serde_json::from_value(config.data.clone()) {
+            Ok(d) => d,
+            Err(e) => {
+                return Err(PWMError::InvalidConfig(
+                    ConfigError::SerializeError(format!("invalid PWM data struct json: {}", e)).to_string()
+                ));
+            }
+        };
+
+        Self::new(gpio_borrow, data.channels)
     }
 
     pub fn open(&mut self, channel: u8) -> Result<Pwm, PWMError> {

@@ -8,7 +8,10 @@ use uuid::Uuid;
 use std::any::Any;
 use crate::gpio::GpioBorrowChecker;
 use crate::bus::BusController;
+use crate::config::{BusControllerConfig, ConfigError};
+use serde::{Serialize, Deserialize};
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UARTDefinition {
     path: String,
     rx: u8,
@@ -100,6 +103,18 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> UARTError {
         Error::Io(e) => UARTError::HardwareError(format!("I/O error: {}", e)),
         Error::Gpio(e) => UARTError::HardwareError(format!("GPIO error: {}", e)),
         Error::InvalidValue => UARTError::NotSupported,
+        _ => UARTError::Other(default_err_msg.to_string())
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct UARTConfigData {
+    internal_ports: Option<HashMap<u8, UARTDefinition>>
+}
+
+impl UARTConfigData {
+    fn new(internal_ports: Option<HashMap<u8, UARTDefinition>>) -> Self {
+        Self { internal_ports }
     }
 }
 
@@ -116,6 +131,12 @@ impl UARTBusController {
         let gpio_checker = gpio_borrow.read();
 
         for (id, definition) in &internal_ports {
+            if !Path::new(definition.path.as_str()).exists() {
+                return Err(UARTError::InvalidConfig(
+                    format!("device path provided by UART port does not exist: {}", definition.path)
+                ));
+            }
+
             if definition.rx == definition.tx {
                 return Err(UARTError::InvalidConfig(
                     format!("UART port is attempting to use the same pin twice: port {} (at {}) -> (RX: {}. TX: {})",
@@ -152,6 +173,22 @@ impl UARTBusController {
             internal_ports: internal_ports, 
             owned_ports: HashMap::new()
         })
+    }
+
+    pub fn from_config(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, config: &BusControllerConfig) -> Result<Self, UARTError> {
+        let data: UARTConfigData = match serde_json::from_value(config.data.clone()) {
+            Ok(d) => d,
+            Err(e) => {
+                return Err(UARTError::InvalidConfig(
+                    ConfigError::SerializeError(format!("invalid UART data struct json: {}", e)).to_string()
+                ));
+            }
+        };
+
+        match data.internal_ports {
+            Some(ports) => Self::with_internals(gpio_borrow, ports),
+            None => Ok(Self::new(gpio_borrow))
+        }
     }
 
     pub fn open(&mut self, port: u8, baud_rate: u32, parity: Parity, data_bits: u8, stop_bits: u8) -> Result<Uart, UARTError> {
