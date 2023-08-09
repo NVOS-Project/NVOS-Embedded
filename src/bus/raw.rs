@@ -13,7 +13,7 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> GpioError {
         Error::PinNotAvailable(p) => GpioError::PinNotFound(p),
         Error::PinUsed(p) => GpioError::Busy(p),
         Error::PermissionDenied(s) => GpioError::PermissionDenied(s),
-        _ => GpioError::Other(String::from(default_err_msg))
+        _ => GpioError::Other(format!("{}: {}", default_err_msg.to_string(), err))
     }
 }
 
@@ -50,7 +50,7 @@ impl BusController for RawBusController {
 impl RawBusController {
     pub fn new(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>) -> Result<Self, GpioError> {
         let gpio = Gpio::new()
-        .map_err(|err| rppal_map_err(err, "Internal RPPAL error while initializing Gpio interface"))?;
+        .map_err(|err| rppal_map_err(err, "Internal RPPAL error while initializing GPIO interface"))?;
         
         Ok(RawBusController {
             gpio_controller: gpio,

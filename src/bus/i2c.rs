@@ -86,7 +86,7 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> I2CError {
         Error::Io(e) => I2CError::HardwareError(format!("I/O error: {}", e)),
         Error::InvalidSlaveAddress(addr) => I2CError::InvalidAddress(addr),
         Error::FeatureNotSupported => I2CError::NotSupported,
-        _ => I2CError::Other(default_err_msg.to_string())
+        _ => I2CError::Other(format!("{}: {}", default_err_msg.to_string(), err))
     }
 }
 

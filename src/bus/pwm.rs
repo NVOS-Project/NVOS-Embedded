@@ -85,7 +85,7 @@ fn u8_to_channel(channel: u8) -> Option<Channel> {
 fn rppal_map_err(err: Error, default_err_msg: &str) -> PWMError {
     match err {
         Error::Io(e) => PWMError::HardwareError(format!("I/O error: {}", e)),
-        _ => PWMError::Other(default_err_msg.to_string())
+        _ => PWMError::Other(format!("{}: {}", default_err_msg.to_string(), err))
     }
 }
 

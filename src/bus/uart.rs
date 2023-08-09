@@ -105,7 +105,7 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> UARTError {
         Error::Io(e) => UARTError::HardwareError(format!("I/O error: {}", e)),
         Error::Gpio(e) => UARTError::HardwareError(format!("GPIO error: {}", e)),
         Error::InvalidValue => UARTError::NotSupported,
-        _ => UARTError::Other(default_err_msg.to_string())
+        _ => UARTError::Other(format!("{}: {}", default_err_msg.to_string(), err))
     }
 }
 
