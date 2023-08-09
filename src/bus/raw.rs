@@ -113,6 +113,10 @@ impl RawBusController {
         let mut borrow_checker = self.gpio_borrow.write();
         let bcm_id = borrow_checker.get(&pin_id)?.bcm_id();
 
+        if !borrow_checker.has_pin(pin_id) {
+            return Err(GpioError::PinNotFound(pin_id));
+        }
+
         if !borrow_checker.can_borrow_one(pin_id) {
             return Err(GpioError::Busy(pin_id));
         }

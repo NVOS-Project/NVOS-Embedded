@@ -17,9 +17,10 @@ pub enum PWMError {
     InvalidConfig(String),
     ChannelNotFound(u8),
     LeaseNotFound,
-    NotSupported,
+    Unsupported,
     ChannelBusy(u8),
     HardwareError(String),
+    OsError(String),
     Other(String)
 }
 
@@ -29,21 +30,22 @@ impl Display for PWMError {
             PWMError::InvalidConfig(msg) => format!("invalid config: {}", msg),
             PWMError::ChannelNotFound(channel_id) => format!("pwm channel {} does not exist", channel_id),
             PWMError::LeaseNotFound => format!("pwm channel is not open"),
-            PWMError::NotSupported => format!("not supported"),
+            PWMError::Unsupported => format!("not supported"),
             PWMError::ChannelBusy(channel_id) => format!("pwm channel {} is busy", channel_id),
             PWMError::HardwareError(msg) => format!("hardware error: {}", msg),
+            PWMError::OsError(msg) => format!("os error: {}", msg),
             PWMError::Other(msg) => format!("{}", msg),
         })
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-struct PWMConfigData {
-    channels: HashMap<u8, u8>
+pub struct PWMConfigData {
+    pub channels: HashMap<u8, u8>
 }
 
 impl PWMConfigData {
-    fn new(channels: HashMap<u8, u8>) -> Self {
+    pub fn new(channels: HashMap<u8, u8>) -> Self {
         Self { channels }
     }
 }
@@ -100,6 +102,7 @@ impl PWMBusController {
                     channel, pin
                 )))
             }
+
             if !gpio_checker.has_pin(*pin) {
                 return Err(PWMError::InvalidConfig(
                     format!("PWM channel is attempting to use invalid pin: channel {} pin {}",
@@ -166,7 +169,7 @@ impl PWMBusController {
         let bus = Pwm::new(u8_to_channel(channel).unwrap())
             .map_err(|err| rppal_map_err(err, &format!("Internal RPPAL error while opening PWM channel {}", channel)))?;
 
-            let borrow_id = borrow_checker.borrow_one(*pin)
+        let borrow_id = borrow_checker.borrow_one(*pin)
             .map_err(|err| PWMError::HardwareError(err.to_string()))?;
         
         self.owned_channels.insert(channel, borrow_id);

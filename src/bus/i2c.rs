@@ -13,8 +13,8 @@ use rppal::i2c::{I2c, Error};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct I2CPinDefinition {
-    sda: u8,
-    scl: u8
+    pub sda: u8,
+    pub scl: u8
 }
 
 impl I2CPinDefinition {
@@ -50,9 +50,10 @@ pub enum I2CError {
     BusNotFound(u8),
     LeaseNotFound,
     InvalidAddress(u16),
-    NotSupported,
+    Unsupported,
     ChannelBusy(u8),
     HardwareError(String),
+    OsError(String),
     Other(String)
 }
 
@@ -63,9 +64,10 @@ impl Display for I2CError {
             I2CError::BusNotFound(channel_id) => format!("I2C channel {} does not exist", channel_id),
             I2CError::LeaseNotFound => format!("specified I2C channel is not open"),
             I2CError::InvalidAddress(device_address) => format!("invalid slave address: {}", device_address),
-            I2CError::NotSupported => format!("not supported"),
+            I2CError::Unsupported => format!("not supported"),
             I2CError::ChannelBusy(channel_id) => format!("I2C channel {} is busy", channel_id),
             I2CError::HardwareError(msg) => format!("hardware error: {}", msg),
+            I2CError::OsError(msg) => format!("os error: {}", msg),
             I2CError::Other(msg) => format!("{}", msg),
         })
     }
@@ -85,18 +87,18 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> I2CError {
     match err {
         Error::Io(e) => I2CError::HardwareError(format!("I/O error: {}", e)),
         Error::InvalidSlaveAddress(addr) => I2CError::InvalidAddress(addr),
-        Error::FeatureNotSupported => I2CError::NotSupported,
+        Error::FeatureNotSupported => I2CError::Unsupported,
         _ => I2CError::Other(format!("{}: {}", default_err_msg.to_string(), err))
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-struct I2cConfigData {
-    channels: HashMap<u8, I2CPinDefinition>
+pub struct I2cConfigData {
+    pub channels: HashMap<u8, I2CPinDefinition>
 }
 
 impl I2cConfigData {
-    fn new(channels: HashMap<u8, I2CPinDefinition>) -> Self {
+    pub fn new(channels: HashMap<u8, I2CPinDefinition>) -> Self {
         Self { channels }
     }
 }
@@ -185,7 +187,7 @@ impl I2CBusController {
         Self::new(gpio_borrow, data.channels)
     }
 
-    fn open(&mut self, bus_id: u8) -> Result<Arc<Mutex<I2c>>, I2CError> {
+    pub fn open(&mut self, bus_id: u8) -> Result<Arc<Mutex<I2c>>, I2CError> {
         if self.owned_buses.contains_key(&bus_id) {
             return Err(I2CError::ChannelBusy(bus_id));
         }
@@ -227,6 +229,12 @@ impl I2CBusController {
             Some(info) => info,
             None => return Err(I2CError::LeaseNotFound)
         };
+
+        let rc = Arc::strong_count(&info.bus);
+        if rc > 1 {
+            warn!("Attempted to close I2C bus {} while still holding {} reference(s) to it", bus_id, rc - 1);
+            return Err(I2CError::ChannelBusy(bus_id));
+        }
 
         let mut borrow_checker = self.gpio_borrow.write();
         borrow_checker.release(&info.lease_id)

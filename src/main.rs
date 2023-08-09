@@ -26,6 +26,9 @@ use bus::i2c::I2CBusController;
 use bus::pwm::PWMBusController;
 use bus::raw::RawBusController;
 use bus::uart::UARTBusController;
+use bus::raw_sysfs::SysfsRawBusController;
+use bus::pwm_sysfs::SysfsPWMBusController;
+use bus::i2c_sysfs::SysfsI2CBusController;
 use bus::BusController;
 
 const SERVE_ADDR: &str = "0.0.0.0:30000";
@@ -104,16 +107,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
         info!("Initializing bus controller \"{}\"", bus_config.name);
         let controller_instance: Result<Arc<RwLock<dyn BusController>>, String> =
             match bus_config.name.to_lowercase().as_str() {
-                "raw" => RawBusController::new(&gpio_borrow)
+                "raw" => RawBusController::from_config(&gpio_borrow, bus_config)
+                    .map(|bus| Arc::new(RwLock::new(bus)) as Arc<RwLock<dyn BusController>>)
+                    .map_err(|err| err.to_string()),
+                "raw_sysfs" => SysfsRawBusController::from_config(&gpio_borrow, bus_config)
                     .map(|bus| Arc::new(RwLock::new(bus)) as Arc<RwLock<dyn BusController>>)
                     .map_err(|err| err.to_string()),
                 "pwm" => PWMBusController::from_config(&gpio_borrow, bus_config)
+                    .map(|bus| Arc::new(RwLock::new(bus)) as Arc<RwLock<dyn BusController>>)
+                    .map_err(|err| err.to_string()),
+                "pwm_sysfs" => SysfsPWMBusController::from_config(&gpio_borrow, bus_config)
                     .map(|bus| Arc::new(RwLock::new(bus)) as Arc<RwLock<dyn BusController>>)
                     .map_err(|err| err.to_string()),
                 "uart" => UARTBusController::from_config(&gpio_borrow, bus_config)
                     .map(|bus| Arc::new(RwLock::new(bus)) as Arc<RwLock<dyn BusController>>)
                     .map_err(|err| err.to_string()),
                 "i2c" => I2CBusController::from_config(&gpio_borrow, bus_config)
+                    .map(|bus| Arc::new(RwLock::new(bus)) as Arc<RwLock<dyn BusController>>)
+                    .map_err(|err| err.to_string()),
+                "i2c_sysfs" => SysfsI2CBusController::from_config(&gpio_borrow, bus_config)
                     .map(|bus| Arc::new(RwLock::new(bus)) as Arc<RwLock<dyn BusController>>)
                     .map_err(|err| err.to_string()),
                 unknown_bus => Err(format!(

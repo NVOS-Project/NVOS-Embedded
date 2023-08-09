@@ -15,9 +15,9 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UARTDefinition {
-    path: String,
-    rx: u8,
-    tx: u8
+    pub path: String,
+    pub rx: u8,
+    pub tx: u8
 }
 
 impl UARTDefinition {
@@ -64,7 +64,7 @@ pub enum UARTError {
     LeaseNotFound,
     Busy,
     HardwareError(String),
-    NotSupported,
+    Unsupported,
     Other(String)
 }
 
@@ -76,7 +76,7 @@ impl Display for UARTError {
             UARTError::LeaseNotFound => format!("specified internal UART channel is not open"),
             UARTError::Busy => format!("UART channel is busy"),
             UARTError::HardwareError(msg) => format!("hardware error: {}", msg),
-            UARTError::NotSupported => format!("not supported"),
+            UARTError::Unsupported => format!("not supported"),
             UARTError::Other(msg) => format!("{}", msg),
         })
     }
@@ -104,14 +104,14 @@ fn rppal_map_err(err: Error, default_err_msg: &str) -> UARTError {
     match err {
         Error::Io(e) => UARTError::HardwareError(format!("I/O error: {}", e)),
         Error::Gpio(e) => UARTError::HardwareError(format!("GPIO error: {}", e)),
-        Error::InvalidValue => UARTError::NotSupported,
+        Error::InvalidValue => UARTError::Unsupported,
         _ => UARTError::Other(format!("{}: {}", default_err_msg.to_string(), err))
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-struct UARTConfigData {
-    internal_ports: Option<HashMap<u8, UARTDefinition>>
+pub struct UARTConfigData {
+    pub internal_ports: Option<HashMap<u8, UARTDefinition>>
 }
 
 impl UARTConfigData {

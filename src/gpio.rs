@@ -31,6 +31,8 @@ pub enum GpioError {
     PinNotFound(u8),
     LeaseNotFound,
     PermissionDenied(String),
+    OsError(String),
+    Unsupported(String),
     Other(String)
 }
 
@@ -41,6 +43,8 @@ impl Display for GpioError {
             GpioError::PinNotFound(p) => format!("pin {} is not available", p),
             GpioError::LeaseNotFound => format!("specified lease does not exist"),
             GpioError::PermissionDenied(s) => format!("permission denied: {}", s),
+            GpioError::OsError(s) => format!("os error: {}", s),
+            GpioError::Unsupported(s) => format!("not supported: {}", s),
             GpioError::Other(s) => format!("{}", s),
         })
     }
@@ -80,6 +84,16 @@ impl GpioBorrowChecker {
 
     pub fn has_pin(&self, pin: u8) -> bool {
         self.pins.contains_key(&pin)
+    }
+
+    pub fn has_pins(&self, pins: &[u8]) -> Result<(), u8> {
+        for pin in pins {
+            if !self.has_pin(*pin) {
+                return Err(*pin);
+            }
+        }
+
+        Ok(())
     }
 
     pub fn has_lease(&self, borrow_id: &Uuid) -> bool {

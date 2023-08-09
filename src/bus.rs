@@ -10,3 +10,8 @@ pub mod raw; // RawBusController
 pub mod i2c; // I2CBusController
 pub mod pwm; // PWMBusController
 pub mod uart; // UARTBusController
+
+// Alternative sysfs implementations
+pub mod raw_sysfs;
+pub mod pwm_sysfs;
+pub mod i2c_sysfs;
