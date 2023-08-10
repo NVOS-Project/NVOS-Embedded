@@ -4,6 +4,7 @@ mod config;
 mod device;
 mod gpio;
 mod rpc;
+mod adb;
 mod tests;
 
 use config::{ConfigError, Configuration};
@@ -18,7 +19,7 @@ use std::{
     fs::File,
     io::{BufReader, BufWriter},
     path::Path,
-    sync::Arc,
+    sync::Arc, time::Duration,
 };
 use tonic::transport::Server;
 
@@ -31,6 +32,8 @@ use bus::pwm_sysfs::SysfsPWMBusController;
 use bus::i2c_sysfs::SysfsI2CBusController;
 use bus::BusController;
 
+use crate::adb::AdbServer;
+
 const SERVE_ADDR: &str = "0.0.0.0:30000";
 const CONFIG_PATH: &str = "nvos_config.json";
 
@@ -38,7 +41,7 @@ const CONFIG_PATH: &str = "nvos_config.json";
 async fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new()
         .with_colors(true)
-        .with_level(LevelFilter::Info)
+        .with_level(LevelFilter::Debug)
         .init()?;
 
     info!("Loading configuration file at {}", CONFIG_PATH);
@@ -167,6 +170,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         Err(e) => error!("Failed to open config file for write: {}", e),
     }
+
+    info!("Starting device server");
     
     // Prepare the device server for multi threading
     let device_server = Arc::new(RwLock::new(device_server));
