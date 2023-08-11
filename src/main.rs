@@ -32,7 +32,7 @@ use bus::pwm_sysfs::SysfsPWMBusController;
 use bus::i2c_sysfs::SysfsI2CBusController;
 use bus::BusController;
 
-use crate::adb::AdbServer;
+use crate::{adb::AdbServer, rpc::heartbeat::{heartbeat_server::HeartbeatServer, HeartbeatService}};
 
 const SERVE_ADDR: &str = "0.0.0.0:30000";
 const CONFIG_PATH: &str = "nvos_config.json";
@@ -182,6 +182,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .add_service(DeviceReflectionServer::new(DeviceReflectionService::new(
             &device_server,
         )))
+        .add_service(HeartbeatServer::new(HeartbeatService::new()))
         .serve(String::from(SERVE_ADDR).parse().unwrap());
 
     info!("Server running on {}!", SERVE_ADDR);
