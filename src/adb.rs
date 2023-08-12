@@ -1,71 +1,192 @@
-use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, net::SocketAddr, time::Duration};
-use log::debug;
+use log::{debug, error, warn};
+use mozdevice::{AndroidStorageInput, Device, DeviceError, DeviceInfo, Host};
+use parking_lot::{MappedMutexGuard, Mutex, MutexGuard, RwLock};
+use std::{sync::Arc, time::Duration};
 use tokio::sync::broadcast;
 use tokio::time;
-use mozdevice::{Host, DeviceInfo};
-use parking_lot::{Mutex, MutexGuard};
-use tonic::server;
 
 const DEFAULT_ADB_HOST: &str = "localhost";
 const DEFAULT_ADB_PORT: u16 = 5037;
 const DEFAULT_ADB_READ_TIMEOUT: Duration = Duration::from_secs(1);
 const DEFAULT_ADB_WRITE_TIMEOUT: Duration = Duration::from_secs(1);
-const CONNECTION_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
+const CONNECTION_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum PortType {
+    Forward,
+    Reverse,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Port {
+    port_type: PortType,
+    local_port_num: u16,
+    remote_port_num: u16,
+}
+
+impl Port {
+    pub fn new(port_type: PortType, local_port_num: u16, remote_port_num: u16) -> Self {
+        Self {
+            port_type,
+            local_port_num,
+            remote_port_num,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+enum AdbMessage {
+    Shutdown,
+}
 
 pub struct AdbServer {
-    connection: Arc<Mutex<Host>>,
-    is_connected: Arc<AtomicBool>,
-    shutdown_channel: broadcast::Sender<()>
+    device: Arc<Mutex<Option<Device>>>,
+    channel: broadcast::Sender<AdbMessage>,
+    forwarded_connections: Arc<RwLock<Vec<Port>>>,
 }
 
 impl AdbServer {
     pub fn new(host: &str, port: u16) -> Self {
-        Self::with_timeout(host, port, DEFAULT_ADB_READ_TIMEOUT, DEFAULT_ADB_WRITE_TIMEOUT)
+        Self::with_timeout(
+            host,
+            port,
+            DEFAULT_ADB_READ_TIMEOUT,
+            DEFAULT_ADB_WRITE_TIMEOUT,
+        )
     }
 
-    pub fn with_timeout(host: &str, port: u16, read_timeout: Duration, write_timeout: Duration) -> Self {
+    pub fn with_timeout(
+        host: &str,
+        port: u16,
+        read_timeout: Duration,
+        write_timeout: Duration,
+    ) -> Self {
         let mut adb_host = Host::default();
         adb_host.host = Some(host.to_string());
         adb_host.port = Some(port);
         adb_host.read_timeout = Some(read_timeout);
         adb_host.write_timeout = Some(write_timeout);
 
-        let (shutdown_sender, shutdown_receiver) = broadcast::channel::<()>(1);
+        let (sender, receiver) = broadcast::channel::<AdbMessage>(16);
         let server = Self {
-            connection: Arc::new(Mutex::new(adb_host)),
-            is_connected: Arc::new(AtomicBool::new(false)),
-            shutdown_channel: shutdown_sender
+            device: Arc::new(Mutex::new(None)),
+            channel: sender,
+            forwarded_connections: Arc::new(RwLock::new(Vec::new())),
         };
 
-        let adb_host = server.connection.clone();
-        let is_connected_channel = server.is_connected.clone();
+        let device = server.device.clone();
+        let forwarded_connections = server.forwarded_connections.clone();
 
         debug!("Spawning heartbeat thread");
         tokio::spawn(async move {
-            AdbServerWorker::new(
-                adb_host,
-                is_connected_channel,
-                shutdown_receiver
-            ).run().await;
+            AdbServerWorker::new(adb_host, device, forwarded_connections, receiver)
+                .run()
+                .await;
         });
 
         server
     }
 
-    pub fn get(&mut self) -> Option<MutexGuard<'_, Host>> {
-        match self.is_connected.load(Ordering::Relaxed) {
-            true => Some(self.connection.lock()),
-            false => None
+    pub fn get_device(&self) -> Result<MappedMutexGuard<'_, Device>, DeviceError> {
+        let guard = self.device.lock();
+        match guard.is_some() {
+            true => Ok(MutexGuard::map(guard, |v| v.as_mut().unwrap())),
+            false => Err(DeviceError::Adb("device not connected".to_string())),
+        }
+    }
+
+    pub fn forward_port(
+        &self,
+        port_type: PortType,
+        local_port: u16,
+        remote_port: u16,
+    ) -> Result<(), DeviceError> {
+        debug!(
+            "Adding port: {:?}, {}, {}",
+            port_type, local_port, remote_port
+        );
+
+        let device = self.get_device()?;
+
+        let r = match port_type {
+            PortType::Forward => device.forward_port(local_port, remote_port),
+            PortType::Reverse => device.reverse_port(remote_port, local_port),
+        };
+
+        match r {
+            Ok(_) => {
+                self.forwarded_connections.write().push(Port::new(
+                    port_type,
+                    local_port,
+                    remote_port,
+                ));
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn remove_forward_port(&self, local_port: u16) -> Result<(), DeviceError> {
+        debug!("Removing forward port {}", local_port);
+
+        let mut connections = self.forwarded_connections.write();
+        let idx = match connections
+            .iter()
+            .position(|x| x.port_type == PortType::Forward && x.local_port_num == local_port)
+        {
+            Some(i) => i,
+            None => {
+                return Err(DeviceError::Adb(format!(
+                    "local port {} is not in use",
+                    local_port
+                )))
+            }
+        };
+
+        let device = self.get_device()?;
+        match device.kill_forward_port(local_port) {
+            Ok(_) => {
+                connections.remove(idx);
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn remove_reverse_port(&self, remote_port: u16) -> Result<(), DeviceError> {
+        debug!("Removing reverse port {}", remote_port);
+
+        let mut connections = self.forwarded_connections.write();
+        let idx = match connections
+            .iter()
+            .position(|x| x.port_type == PortType::Reverse && x.remote_port_num == remote_port)
+        {
+            Some(i) => i,
+            None => {
+                return Err(DeviceError::Adb(format!(
+                    "local port {} is not in use",
+                    remote_port
+                )))
+            }
+        };
+
+        let device = self.get_device()?;
+        match device.kill_reverse_port(remote_port) {
+            Ok(_) => {
+                connections.remove(idx);
+                Ok(())
+            }
+            Err(e) => Err(e),
         }
     }
 
     pub fn is_connected(&self) -> bool {
-        self.is_connected.load(Ordering::Relaxed)
+        self.device.lock().is_some()
     }
 
     pub fn shutdown(&self) {
         debug!("Shutting down ADB server");
-        let _ = self.shutdown_channel.send(());
+        let _ = self.channel.send(AdbMessage::Shutdown);
     }
 }
 
@@ -82,17 +203,26 @@ impl Drop for AdbServer {
 }
 
 struct AdbServerWorker {
-    host: Arc<Mutex<Host>>,
-    is_connected: Arc<AtomicBool>,
-    shutdown_receiver: broadcast::Receiver<()>
+    host: Host,
+    device: Arc<Mutex<Option<Device>>>,
+    forwarded_connections: Arc<RwLock<Vec<Port>>>,
+    channel: broadcast::Receiver<AdbMessage>,
+    is_connected: bool,
 }
 
 impl AdbServerWorker {
-    fn new(host: Arc<Mutex<Host>>, is_connected_channel: Arc<AtomicBool>, shutdown_channel: broadcast::Receiver<()>) -> Self {
-        Self { 
-            host: host,
-            is_connected: is_connected_channel, 
-            shutdown_receiver: shutdown_channel 
+    fn new(
+        host: Host,
+        device: Arc<Mutex<Option<Device>>>,
+        forwarded_connections: Arc<RwLock<Vec<Port>>>,
+        channel: broadcast::Receiver<AdbMessage>,
+    ) -> Self {
+        Self {
+            host,
+            device,
+            forwarded_connections,
+            channel,
+            is_connected: false,
         }
     }
 
@@ -100,40 +230,140 @@ impl AdbServerWorker {
         loop {
             tokio::select! {
                 _ = time::sleep(CONNECTION_HEARTBEAT_INTERVAL) => {
-                    self.do_heartbeat().await;
+                    debug!("Running checks");
+                    self.run_checks().await;
                 },
-                _ = self.shutdown_receiver.recv() => {
-                    debug!("Received shutdown signal, stopping...");
-                    break;
+                signal = self.channel.recv() => {
+                    if !signal.is_ok() {
+                        continue;
+                    }
+
+                    match signal.unwrap() {
+                        AdbMessage::Shutdown => {
+                            debug!("Received shutdown signal, stopping...");
+                            break;
+                        },
+                        other => {
+                            error!("ADB server worker received unsupported signal: {:?}", other);
+                            break;
+                        }
+                    }
                 }
             }
         }
     }
 
-    async fn do_heartbeat(&mut self) {
-        let host = self.host.lock();
-        let is_connected_flag = &self.is_connected;
-        if is_connected_flag.load(Ordering::Relaxed) {
-            match host.devices::<Vec<DeviceInfo>>() {
-                Ok(devices) => {
-                    return;
-                },
-                Err(e) => {
-                    debug!("ADB server died: {}", e);
-                    is_connected_flag.store(false, Ordering::Relaxed);
-                }
+    async fn run_checks(&mut self) {
+        if !self.is_connected {
+            match self.connect_server().await {
+                true => self.is_connected = true,
+                false => return
+            };
+        }
+
+        if self.device.lock().is_none() {
+            if !self.connect_device().await {
+                return;
+            }
+
+            self.restore_port_map().await;
+            return;
+        }
+
+        let mut device = self.device.lock();
+        // Equivalent to a server heartbeat
+        let devices = match self.host.devices::<Vec<DeviceInfo>>() {
+            Ok(devices) => devices,
+            Err(e) => {
+                debug!("Lost server connection: {}", e);
+                *device = None;
+                self.is_connected = false;
+                return;
+            }
+        };
+
+        if devices.len() == 0 && device.is_some() {
+            debug!("Lost device connection");
+            *device = None;
+        }
+    }
+
+    async fn connect_server(&mut self) -> bool {
+        match self.host.connect() {
+            Ok(_) => {
+                debug!("Connected to server");
+                true
+            }
+            Err(e) => {
+                debug!("Failed to connect to server: {}", e);
+                false
+            }
+        }
+    }
+
+    async fn connect_device(&mut self) -> bool {
+        if !self.is_connected {
+            error!("Failed to connect to device: not connected to adb server");
+            return false;
+        }
+
+        let host = &self.host;
+        let host_cloned = Host {
+            host: host.host.to_owned(),
+            port: host.port,
+            read_timeout: host.read_timeout,
+            write_timeout: host.write_timeout,
+        };
+
+        match host_cloned.connect() {
+            Ok(_) => debug!("Host clone connect OK"),
+            Err(e) => {
+                error!("Failed to create a device tunnel: {}", e);
+                return false;
             }
         }
 
-        debug!("Connecting to ADB server");
-        match host.connect() {
-            Ok(_) => {
-                debug!("Connected to server");
-                is_connected_flag.store(true, Ordering::Relaxed);
-            },
+        match host_cloned.device_or_default::<String>(None, AndroidStorageInput::Auto) {
+            Ok(device) => {
+                debug!("Got a device! serial: {}", device.serial);
+                let mut guard = self.device.lock();
+                *guard = Some(device);
+                return true;
+            }
             Err(e) => {
-                debug!("Failed to connect to server: {}", e);
-            },
+                debug!("Failed to obtain a device connection: {}", e);
+                return false;
+            }
+        }
+    }
+
+    async fn restore_port_map(&mut self) {
+        let connections = self.forwarded_connections.read().clone();
+
+        if connections.len() == 0 {
+            debug!("No connections to restore, aborting.");
+            return;
+        }
+
+        let guard = self.device.lock();
+        let device = match *guard {
+            Some(ref d) => d,
+            None => {
+                error!("Failed to restore ADB connection mappings: device not connected");
+                return;
+            }
+        };
+
+        for port in connections {
+            let r = match port.port_type {
+                PortType::Forward => device.forward_port(port.local_port_num, port.local_port_num),
+                PortType::Reverse => device.reverse_port(port.remote_port_num, port.local_port_num),
+            };
+
+            match r {
+                Ok(_) => debug!("Restored port mapping: {:?}", port),
+                Err(_) => warn!("Failed to restore mapping {:?}: {}", port, r.unwrap_err())
+            }
         }
     }
 }

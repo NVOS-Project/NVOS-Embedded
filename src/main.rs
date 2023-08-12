@@ -19,7 +19,7 @@ use std::{
     fs::File,
     io::{BufReader, BufWriter},
     path::Path,
-    sync::Arc, time::Duration,
+    sync::Arc
 };
 use tonic::transport::Server;
 
@@ -172,7 +172,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     info!("Starting device server");
-    
     // Prepare the device server for multi threading
     let device_server = Arc::new(RwLock::new(device_server));
 

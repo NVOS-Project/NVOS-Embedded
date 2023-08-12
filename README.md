@@ -11,14 +11,14 @@ This repository contains the embedded firmware that drives the NVOS root control
  - ### System
    - Exclusive GPIO access layer: ✔️
    - Persistent ADB server access API: ✔️
-   - Networking failure recovery: ❌
+   - Networking failure recovery: ✔️
    - Device server: ✔️
    - gRPC server: ✔️
    - Device capability API (for building stable gRPC APIs): ✔️
    - Configuration file: ✔️
    - Configuration hot-reload: ❌
    - Dynamic bus controller loading (on startup): ✔️
-   - Dynamic device driver loading (any time): ✔️
+   - Dynamic device driver loading (any time): ❌
 - ### Controllers
   - #### Raw GPIO pin access:
     - raw: ✔️ (BROKEN)
