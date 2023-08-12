@@ -1,10 +1,10 @@
+mod adb;
 mod bus;
 mod capabilities;
 mod config;
 mod device;
 mod gpio;
 mod rpc;
-mod adb;
 mod tests;
 
 use config::{ConfigError, Configuration};
@@ -19,19 +19,27 @@ use std::{
     fs::File,
     io::{BufReader, BufWriter},
     path::Path,
-    sync::Arc
+    sync::Arc,
 };
 use tonic::transport::Server;
 
+use crate::{
+    adb::AdbServer,
+    rpc::{
+        gps::{gps_server::GpsServer, GpsService},
+        heartbeat::{heartbeat_server::HeartbeatServer, HeartbeatService},
+        led::{led_controller_server::LedControllerServer, LEDControllerService},
+        network::{network_manager_server::NetworkManagerServer, NetworkManagerService},
+    },
+};
 use bus::i2c::I2CBusController;
-use bus::pwm::PWMBusController;
-use bus::raw::RawBusController;
-use bus::uart::UARTBusController;
-use bus::raw_sysfs::SysfsRawBusController;
-use bus::pwm_sysfs::SysfsPWMBusController;
 use bus::i2c_sysfs::SysfsI2CBusController;
+use bus::pwm::PWMBusController;
+use bus::pwm_sysfs::SysfsPWMBusController;
+use bus::raw::RawBusController;
+use bus::raw_sysfs::SysfsRawBusController;
+use bus::uart::UARTBusController;
 use bus::BusController;
-use crate::rpc::{heartbeat::{heartbeat_server::HeartbeatServer, HeartbeatService}, led::{LEDControllerService, led_controller_server::LedControllerServer}, gps::{GpsService, gps_server::GpsServer}};
 
 const SERVE_ADDR: &str = "0.0.0.0:30000";
 const CONFIG_PATH: &str = "nvos_config.json";
@@ -174,20 +182,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Prepare the device server for multi threading
     let device_server = Arc::new(RwLock::new(device_server));
 
+    info!("Starting ADB server connection");
+    let adb_server = Arc::new(RwLock::new(AdbServer::default()));
+
     // Serve gRPC
     let rpc_server = Server::builder()
         .tcp_nodelay(true)
         .accept_http1(true)
-        .add_service(tonic_web::enable(DeviceReflectionServer::new(DeviceReflectionService::new(
-            &device_server
-        ))))
-        .add_service(tonic_web::enable(LedControllerServer::new(LEDControllerService::new(
-            &device_server
-        ))))
-        .add_service(tonic_web::enable(GpsServer::new(GpsService::new(
-            &device_server
-        ))))
-        .add_service(tonic_web::enable(HeartbeatServer::new(HeartbeatService::new())))
+        .add_service(tonic_web::enable(DeviceReflectionServer::new(
+            DeviceReflectionService::new(&device_server),
+        )))
+        .add_service(tonic_web::enable(LedControllerServer::new(
+            LEDControllerService::new(&device_server),
+        )))
+        .add_service(tonic_web::enable(GpsServer::new(
+            GpsService::new(&device_server),
+        )))
+        .add_service(tonic_web::enable(NetworkManagerServer::new(
+            NetworkManagerService::new(&adb_server),
+        )))
+        .add_service(tonic_web::enable(HeartbeatServer::new(
+            HeartbeatService::new(),
+        )))
         .serve(String::from(SERVE_ADDR).parse().unwrap());
 
     info!("Server running on {}!", SERVE_ADDR);
