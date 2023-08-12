@@ -36,20 +36,20 @@ pub enum LEDMode {
 }
 
 pub trait LEDControllerCapable : Capability {
-    fn GetMode(&self) -> Result<LEDMode, DeviceError>;
-    fn SetMode(&mut self, mode: LEDMode) -> Result<(), DeviceError>;
-    fn GetBrightness(&self) -> Result<f32, DeviceError>;
-    fn SetBrightness(&mut self, brightness: f32) -> Result<(), DeviceError>;
-    fn GetPowerState(&self) -> Result<(), DeviceError>;
-    fn SetPowerState(&mut self, powered_on: bool) -> Result<(), DeviceError>;
+    fn get_mode(&self) -> Result<LEDMode, DeviceError>;
+    fn set_mode(&mut self, mode: LEDMode) -> Result<(), DeviceError>;
+    fn get_brightness(&self) -> Result<f32, DeviceError>;
+    fn set_brightness(&mut self, brightness: f32) -> Result<(), DeviceError>;
+    fn get_power_state(&self) -> Result<bool, DeviceError>;
+    fn set_power_state(&mut self, powered_on: bool) -> Result<(), DeviceError>;
 }
 
 pub trait GpsCapable : Capability {
-    fn GetLocation(&self) -> Result<(f64, f64), DeviceError>;
-    fn GetAltitude(&self) -> Result<f32, DeviceError>;
-    fn HasFix(&self) -> Result<bool, DeviceError>;
-    fn GetSpeed(&self) -> Result<f32, DeviceError>;
-    fn GetHeading(&self) -> Result<f32, DeviceError>;
-    fn GetSatellites(&self) -> Result<Vec<Satellite>, DeviceError>;
-    fn GetNmea(&self) -> Result<&Nmea, DeviceError>;
+    fn get_location(&self) -> Result<(f64, f64), DeviceError>;
+    fn get_altitude(&self) -> Result<f32, DeviceError>;
+    fn has_fix(&self) -> Result<bool, DeviceError>;
+    fn get_speed(&self) -> Result<f32, DeviceError>;
+    fn get_heading(&self) -> Result<f32, DeviceError>;
+    fn get_satellites(&self) -> Result<Vec<Satellite>, DeviceError>;
+    fn get_nmea(&self) -> Result<&Nmea, DeviceError>;
 }
