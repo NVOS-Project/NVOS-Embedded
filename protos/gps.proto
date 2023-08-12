@@ -30,6 +30,10 @@ message GetNumSatellitesResponse {
     uint32 Count = 1;
 }
 
+message GetAccuracyResponse {
+    float Accuracy = 1;
+}
+
 message GetFullReportResponse {
     bool HasFix = 1;
     double Latitude = 2;
@@ -38,6 +42,8 @@ message GetFullReportResponse {
     float SpeedOverGround = 5;
     float Heading = 6;
     uint32 SatelliteCount = 7;
+    float VerticalAccuracy = 8;
+    float HorizontalAccuracy = 9;
 }
 
 service Gps {
@@ -48,4 +54,6 @@ service Gps {
     rpc GetHeading (GpsRequest) returns (GetHeadingResponse);
     rpc GetNumSatellites (GpsRequest) returns (GetNumSatellitesResponse);
     rpc GetFullReport (GpsRequest) returns (GetFullReportResponse);
+    rpc GetVerticalAccuracy (GpsRequest) returns (GetAccuracyResponse);
+    rpc GetHorizontalAccuracy (GpsRequest) returns (GetAccuracyResponse);
 }

@@ -154,16 +154,32 @@ impl Gps for GpsService {
         }
     }
 
+    async fn get_vertical_accuracy(&self, req: Request<GpsRequest>) -> Result<Response<GetAccuracyResponse>, Status> {
+        let address = req.get_ref().address.to_owned();
+        let device = self.get_device(address)?;
+
+        match device.get_vertical_accuracy() {
+            Ok(acc) => Ok(Response::new(GetAccuracyResponse { accuracy: acc })),
+            Err(e) => Err(Status::internal(format!("Failed to get accuracy: {}", e)))
+        }
+    }
+
+    async fn get_horizontal_accuracy(&self, req: Request<GpsRequest>) -> Result<Response<GetAccuracyResponse>, Status> {
+        let address = req.get_ref().address.to_owned();
+        let device = self.get_device(address)?;
+
+        match device.get_horizontal_accuracy() {
+            Ok(acc) => Ok(Response::new(GetAccuracyResponse { accuracy: acc })),
+            Err(e) => Err(Status::internal(format!("Failed to get accuracy: {}", e)))
+        }
+    }
+
     async fn get_full_report(&self, req: Request<GpsRequest>) -> Result<Response<GetFullReportResponse>, Status> {
         let address = req.get_ref().address.to_owned();
         let device = self.get_device(address)?;
         let mut response = GetFullReportResponse::default();
 
         let location = device.get_location();
-        let altitude = device.get_altitude();
-        let speed = device.get_speed();
-        let heading = device.get_heading();
-        let satellite_count = device.get_satellites().map(|x| x.len() as u32);
 
         if location.is_ok() {
             let (lat, lon) = location.unwrap();
@@ -171,10 +187,12 @@ impl Gps for GpsService {
             response.longitude = lon;
         }
 
-        response.altitude = altitude.unwrap_or(0.0);
-        response.speed_over_ground = speed.unwrap_or(0.0);
-        response.heading = heading.unwrap_or(0.0);
-        response.satellite_count = satellite_count.unwrap_or(0);
+        response.altitude = device.get_altitude().unwrap_or(0.0);
+        response.speed_over_ground = device.get_speed().unwrap_or(0.0);
+        response.heading = device.get_heading().unwrap_or(0.0);
+        response.satellite_count = device.get_satellites().map(|x| x.len() as u32).unwrap_or(0);
+        response.vertical_accuracy = device.get_vertical_accuracy().unwrap_or(0.0);
+        response.horizontal_accuracy = device.get_horizontal_accuracy().unwrap_or(0.0);
         Ok(Response::new(response))
     }
 }
