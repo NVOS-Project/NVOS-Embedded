@@ -1,9 +1,11 @@
 use log::{debug, error, warn};
 use mozdevice::{AndroidStorageInput, Device, DeviceError, DeviceInfo, Host};
-use parking_lot::{MappedMutexGuard, Mutex, MutexGuard, RwLock};
+use parking_lot::{MappedMutexGuard, Mutex, MutexGuard, RwLock, RwLockReadGuard};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::broadcast;
 use tokio::time;
+
+use crate::device::DeviceError;
 
 const DEFAULT_ADB_HOST: &str = "localhost";
 const DEFAULT_ADB_PORT: u16 = 5037;
@@ -19,9 +21,9 @@ pub enum PortType {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Port {
-    port_type: PortType,
-    local_port_num: u16,
-    remote_port_num: u16,
+    pub port_type: PortType,
+    pub local_port_num: u16,
+    pub remote_port_num: u16,
 }
 
 impl Port {
@@ -111,6 +113,26 @@ impl AdbServer {
             port_type, local_port, remote_port
         );
 
+        match port_type {
+            PortType::Forward => {
+                if self.forwarded_connections.read().iter().any(|x| x.port_type == PortType::Forward && x.local_port_num == local_port) {
+                    return Err(DeviceError::Adb(format!(
+                        "local port {} is already in use",
+                        local_port
+                    )));
+                }
+            },
+            PortType::Reverse => {
+                if self.forwarded_connections.read().iter().any(|x| x.port_type == PortType::Reverse && x.remote_port_num == remote_port) {
+                    return Err(DeviceError::Adb(format!(
+                        "remote port {} is already in use",
+                        local_port
+                    )));
+                }
+            },
+        }
+        
+
         if require_connection {
             // Caller wants the port forwarded NOW
             // This will fail if no device is connected to the network
@@ -183,6 +205,10 @@ impl AdbServer {
         
         connections.remove(idx);
         Ok(())
+    }
+
+    pub fn get_running_ports(&self) -> RwLockReadGuard<'_, Vec<Port>> {
+        self.forwarded_connections.read()
     }
 
     pub fn is_connected(&self) -> bool {
