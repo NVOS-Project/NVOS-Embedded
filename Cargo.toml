@@ -24,6 +24,7 @@ sysfs_gpio = "0.6.1"
 i2c-linux = "0.1.2"
 sysfs-pwm = "0.1.0"
 mozdevice = "0.5.1"
+tonic-web = "0.9.2"
 
 [build-dependencies]
 tonic-build = "0.9.2"

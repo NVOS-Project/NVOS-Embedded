@@ -179,10 +179,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Serve gRPC
     let rpc_server = Server::builder()
         .tcp_nodelay(true)
-        .add_service(DeviceReflectionServer::new(DeviceReflectionService::new(
+        .accept_http1(true)
+        .add_service(tonic_web::enable(DeviceReflectionServer::new(DeviceReflectionService::new(
             &device_server,
-        )))
-        .add_service(HeartbeatServer::new(HeartbeatService::new()))
+        ))))
+        .add_service(tonic_web::enable(HeartbeatServer::new(HeartbeatService::new())))
         .serve(String::from(SERVE_ADDR).parse().unwrap());
 
     info!("Server running on {}!", SERVE_ADDR);
