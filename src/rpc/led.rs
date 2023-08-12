@@ -112,24 +112,21 @@ impl LedController for LEDControllerService {
         let brightness = device.get_brightness();
         let mode = device.get_mode();
         let mut response = GetStateResponse::default();
-        if power_state.is_ok() {
-            response.powered_on = power_state.unwrap();
-        }
 
-        if brightness.is_ok() {
-            response.brightness = brightness.unwrap();
-        }
-
-        if mode.is_ok() {
-            response.mode = map_led_mode(mode.unwrap()) as i32;
-        }
-
+        response.powered_on = power_state.unwrap_or(false);
+        response.brightness = brightness.unwrap_or(0.0);
+        response.mode = map_led_mode(mode.unwrap_or(LEDMode::Infrared)) as i32;
         Ok(Response::new(response))
     }
 
     async fn set_brightness(&self, req: Request<SetBrightnessRequest>) -> Result<Response<Void>, Status> {
+        let brightness = req.get_ref().brightness;
+        if brightness < 0.0 || brightness > 1.0 {
+            return Err(Status::out_of_range("Brightness value was out of range"));
+        }
+
         let mut device = self.get_device_mut(req.get_ref().address.to_owned())?;
-        match device.set_brightness(req.get_ref().brightness) {
+        match device.set_brightness(brightness) {
             Ok(_) => Ok(Response::new(Void::default())),
             Err(e) => Err(Status::internal(format!("Failed to set brightness: {}", e)))
         }
