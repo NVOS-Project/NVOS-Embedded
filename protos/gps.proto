@@ -1,0 +1,51 @@
+syntax = "proto3";
+package gps;
+
+message GpsRequest {
+    string Address = 1;
+}
+
+message GetLocationResponse {
+    double Latitude = 1;
+    double Longitude = 2;
+}
+
+message GetAltitudeResponse {
+    float Altitude = 1;
+}
+
+message HasFixResponse {
+    bool HasFix = 1;
+}
+
+message GetSpeedResponse {
+    float SpeedOverGround = 1;
+}
+
+message GetHeadingResponse {
+    float Heading = 1;
+}
+
+message GetNumSattelitesResponse {
+    uint32 Count = 1;
+}
+
+message GetFullReportResponse {
+    bool HasFix = 1;
+    double Latitude = 2;
+    double Longitude = 3;
+    float Altitude = 4;
+    float SpeedOverGround = 5;
+    float Heading = 6;
+    uint32 SatteliteCount = 7;
+}
+
+service Gps {
+    rpc GetLocation (GpsRequest) returns (GetLocationResponse);
+    rpc GetAltitude (GpsRequest) returns (GetAltitudeResponse);
+    rpc HasFix (GpsRequest) returns (HasFixResponse);
+    rpc GetSpeed (GpsRequest) returns (GetSpeedResponse);
+    rpc GetHeading (GpsRequest) returns (GetHeadingResponse);
+    rpc GetNumSattelites (GpsRequest) returns (GetNumSattelitesResponse);
+    rpc GetFullReport (GpsRequest) returns (GetFullReportResponse);
+}

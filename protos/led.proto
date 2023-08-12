@@ -1,0 +1,41 @@
+syntax = "proto3";
+package led;
+
+import "void.proto";
+
+enum LEDMode {
+    VIS = 0;
+    IR = 1;
+}
+
+message GetStateRequest {
+    string Address = 1;
+}
+
+message GetStateResponse {
+    bool PoweredOn = 1;
+    float Brightness = 2;
+    LEDMode Mode = 3;
+}
+
+message SetBrightnessRequest {
+    string Address = 1;
+    float Brightness = 2;
+}
+
+message SetModeRequest {
+    string Address = 1;
+    LEDMode Mode = 2;
+}
+
+message SetPowerStateRequest {
+    string Address = 1;
+    bool PoweredOn = 2;
+}
+
+service LEDController {
+    rpc GetState (GetStateRequest) returns (GetStateResponse);
+    rpc SetBrightness(SetBrightnessRequest) returns (void.Void);
+    rpc SetMode(SetModeRequest) returns (void.Void);
+    rpc SetPowerState(SetPowerStateRequest) returns (void.Void);
+}

@@ -1,0 +1,40 @@
+syntax = "proto3";
+package network;
+
+import "void.proto";
+
+enum PortType {
+    Forward = 0;
+    Reverse = 1;
+}
+
+message Port {
+    PortType Type = 1;
+    uint32 LocalPort = 2;
+    uint32 RemotePort = 3;
+}
+
+message GetRunningPortsResponse {
+    repeated Port Ports = 1;
+}
+
+message AddPortRequest {
+    uint32 ServerPort = 1;
+    uint32 DevicePort = 2;
+}
+
+message RemoveForwardPortRequest {
+    uint32 ServerPort = 1;
+}
+
+message RemoveReversePortRequest {
+    uint32 DevicePort = 2;
+}
+
+service NetworkManager {
+    rpc GetRunningPorts (void.Void) returns (GetRunningPortsResponse);
+    rpc AddForwardPort (AddPortRequest) returns (void.Void);
+    rpc AddReversePort (AddPortRequest) returns (void.Void);
+    rpc RemoveForwardPort (RemoveForwardPortRequest) returns (void.Void);
+    rpc RemoveReversePort (RemoveReversePortRequest) returns (void.Void);
+}
