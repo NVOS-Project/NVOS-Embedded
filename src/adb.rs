@@ -230,7 +230,6 @@ impl AdbServerWorker {
         loop {
             tokio::select! {
                 _ = time::sleep(CONNECTION_HEARTBEAT_INTERVAL) => {
-                    debug!("Running checks");
                     self.run_checks().await;
                 },
                 signal = self.channel.recv() => {
@@ -316,7 +315,7 @@ impl AdbServerWorker {
         };
 
         match host_cloned.connect() {
-            Ok(_) => debug!("Host clone connect OK"),
+            Ok(_) => {},
             Err(e) => {
                 error!("Failed to create a device tunnel: {}", e);
                 return false;
