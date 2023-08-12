@@ -5,8 +5,6 @@ use std::{sync::Arc, time::Duration};
 use tokio::sync::broadcast;
 use tokio::time;
 
-use crate::device::DeviceError;
-
 const DEFAULT_ADB_HOST: &str = "localhost";
 const DEFAULT_ADB_PORT: u16 = 5037;
 const DEFAULT_ADB_READ_TIMEOUT: Duration = Duration::from_secs(1);
