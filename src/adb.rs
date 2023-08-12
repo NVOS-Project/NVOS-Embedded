@@ -95,38 +95,42 @@ impl AdbServer {
         }
     }
 
+    pub fn has_device(&self) -> bool {
+        self.device.lock().is_some()
+    }
+
     pub fn forward_port(
         &self,
         port_type: PortType,
         local_port: u16,
         remote_port: u16,
+        require_connection: bool
     ) -> Result<(), DeviceError> {
         debug!(
             "Adding port: {:?}, {}, {}",
             port_type, local_port, remote_port
         );
 
-        let device = self.get_device()?;
+        if require_connection {
+            // Caller wants the port forwarded NOW
+            // This will fail if no device is connected to the network
+            let device = self.get_device()?;
 
-        let r = match port_type {
-            PortType::Forward => device.forward_port(local_port, remote_port),
-            PortType::Reverse => device.reverse_port(remote_port, local_port),
-        };
-
-        match r {
-            Ok(_) => {
-                self.forwarded_connections.write().push(Port::new(
-                    port_type,
-                    local_port,
-                    remote_port,
-                ));
-                Ok(())
-            }
-            Err(e) => Err(e),
+            match port_type {
+                PortType::Forward => device.forward_port(local_port, remote_port),
+                PortType::Reverse => device.reverse_port(remote_port, local_port),
+            }?;
         }
+
+        self.forwarded_connections.write().push(Port::new(
+            port_type,
+            local_port,
+            remote_port,
+        ));
+        Ok(())
     }
 
-    pub fn remove_forward_port(&self, local_port: u16) -> Result<(), DeviceError> {
+    pub fn remove_forward_port(&self, local_port: u16, require_connection: bool) -> Result<(), DeviceError> {
         debug!("Removing forward port {}", local_port);
 
         let mut connections = self.forwarded_connections.write();
@@ -143,17 +147,18 @@ impl AdbServer {
             }
         };
 
-        let device = self.get_device()?;
-        match device.kill_forward_port(local_port) {
-            Ok(_) => {
-                connections.remove(idx);
-                Ok(())
-            }
-            Err(e) => Err(e),
+        if require_connection {
+            // See forward_port for details
+            let device = self.get_device()?;
+            device.kill_forward_port(local_port)?;
         }
+
+        connections.remove(idx);
+        Ok(())
+        
     }
 
-    pub fn remove_reverse_port(&self, remote_port: u16) -> Result<(), DeviceError> {
+    pub fn remove_reverse_port(&self, remote_port: u16, require_connection: bool) -> Result<(), DeviceError> {
         debug!("Removing reverse port {}", remote_port);
 
         let mut connections = self.forwarded_connections.write();
@@ -164,20 +169,20 @@ impl AdbServer {
             Some(i) => i,
             None => {
                 return Err(DeviceError::Adb(format!(
-                    "local port {} is not in use",
+                    "remote port {} is not in use",
                     remote_port
                 )))
             }
         };
 
-        let device = self.get_device()?;
-        match device.kill_reverse_port(remote_port) {
-            Ok(_) => {
-                connections.remove(idx);
-                Ok(())
-            }
-            Err(e) => Err(e),
+        if require_connection {
+            // See forward_port for details
+            let device = self.get_device()?;
+            device.kill_reverse_port(remote_port)?;
         }
+        
+        connections.remove(idx);
+        Ok(())
     }
 
     pub fn is_connected(&self) -> bool {
