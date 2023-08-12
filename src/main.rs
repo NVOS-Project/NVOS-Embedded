@@ -31,8 +31,7 @@ use bus::raw_sysfs::SysfsRawBusController;
 use bus::pwm_sysfs::SysfsPWMBusController;
 use bus::i2c_sysfs::SysfsI2CBusController;
 use bus::BusController;
-
-use crate::{adb::AdbServer, rpc::heartbeat::{heartbeat_server::HeartbeatServer, HeartbeatService}};
+use crate::rpc::{heartbeat::{heartbeat_server::HeartbeatServer, HeartbeatService}, led::{LEDControllerService, led_controller_server::LedControllerServer}, gps::{GpsService, gps_server::GpsServer}};
 
 const SERVE_ADDR: &str = "0.0.0.0:30000";
 const CONFIG_PATH: &str = "nvos_config.json";
@@ -180,7 +179,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .tcp_nodelay(true)
         .accept_http1(true)
         .add_service(tonic_web::enable(DeviceReflectionServer::new(DeviceReflectionService::new(
-            &device_server,
+            &device_server
+        ))))
+        .add_service(tonic_web::enable(LedControllerServer::new(LEDControllerService::new(
+            &device_server
+        ))))
+        .add_service(tonic_web::enable(GpsServer::new(GpsService::new(
+            &device_server
         ))))
         .add_service(tonic_web::enable(HeartbeatServer::new(HeartbeatService::new())))
         .serve(String::from(SERVE_ADDR).parse().unwrap());
