@@ -26,7 +26,7 @@ message GetHeadingResponse {
     float Heading = 1;
 }
 
-message GetNumSattelitesResponse {
+message GetNumSatellitesResponse {
     uint32 Count = 1;
 }
 
@@ -37,7 +37,7 @@ message GetFullReportResponse {
     float Altitude = 4;
     float SpeedOverGround = 5;
     float Heading = 6;
-    uint32 SatteliteCount = 7;
+    uint32 SatelliteCount = 7;
 }
 
 service Gps {
@@ -46,6 +46,6 @@ service Gps {
     rpc HasFix (GpsRequest) returns (HasFixResponse);
     rpc GetSpeed (GpsRequest) returns (GetSpeedResponse);
     rpc GetHeading (GpsRequest) returns (GetHeadingResponse);
-    rpc GetNumSattelites (GpsRequest) returns (GetNumSattelitesResponse);
+    rpc GetNumSatellites (GpsRequest) returns (GetNumSatellitesResponse);
     rpc GetFullReport (GpsRequest) returns (GetFullReportResponse);
 }

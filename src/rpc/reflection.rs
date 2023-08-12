@@ -19,7 +19,8 @@ impl DeviceReflectionService {
 
 fn map_capability_to_rpc(cap: crate::capabilities::CapabilityId) -> self::CapabilityId {
     match cap {
-
+        crate::capabilities::CapabilityId::LEDController => CapabilityId::LedController,
+        crate::capabilities::CapabilityId::GPS => CapabilityId::Gps,
     }
 }
 
