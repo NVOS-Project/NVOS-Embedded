@@ -33,10 +33,10 @@ This repository contains the embedded firmware that drives the NVOS root control
     - uart: ✔️
 - ### RPC services / Capabilities:
   - Device reflection: ✔️
-  - Networking: ❌
-  - GPS: ❌
+  - Networking: ✔️
+  - GPS: ✔️
   - Compass: ❌
-  - Lighting: ❌
+  - LED: ✔️
 - ### Device drivers:
   - LED (???): ❌
   - GPS (gps_uart): ❌
