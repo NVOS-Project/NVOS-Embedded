@@ -1,6 +1,7 @@
 use intertrait::CastFromSync;
 use intertrait::cast::CastRef;
 use nmea::{Satellite, Nmea};
+use serde::{Serialize, Deserialize};
 use strum::{EnumIter, IntoEnumIterator};
 
 use crate::device::DeviceError;
@@ -30,6 +31,7 @@ pub enum CapabilityId {
 }
 
 // Any capability APIs will go here
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum LEDMode {
     Visible,
     Infrared

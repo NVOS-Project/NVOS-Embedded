@@ -6,6 +6,7 @@ mod device;
 mod gpio;
 mod rpc;
 mod tests;
+mod drivers;
 
 use config::{ConfigError, Configuration};
 use device::DeviceServer;

@@ -69,7 +69,9 @@ pub enum DeviceError {
     NotFound(Uuid),
     MissingController(String),
     DuplicateController,
-    HardwareError,
+    HardwareError(String),
+    InvalidOperation(String),
+    InvalidConfig(String),
     Other(String)
 }
 
@@ -79,7 +81,9 @@ impl Display for DeviceError {
             DeviceError::NotFound(id) => format!("device with address {} is not registered", id),
             DeviceError::MissingController(name) => format!("bus controller \"{}\" was unavailable", name),
             DeviceError::DuplicateController => format!("controller of the same type is already registered"),
-            DeviceError::HardwareError => format!("a hardware error has occurred"),
+            DeviceError::HardwareError(desc) => format!("a hardware error has occurred: {}", desc),
+            DeviceError::InvalidOperation(desc) => format!("invalid operation: {}", desc),
+            DeviceError::InvalidConfig(desc) => format!("invalid config: {}", desc),
             DeviceError::Other(desc) => format!("an unknown error has occurred: {}", desc)
         })
     }
