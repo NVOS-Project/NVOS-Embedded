@@ -192,7 +192,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
     info!("Forwarding gRPC server port");
     match adb_server.add_port(
-        PortType::Forward,
+        PortType::Reverse,
         config.rpc_section.server_port,
         config.rpc_section.server_port,
         false,
