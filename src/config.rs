@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::net::ToSocketAddrs;
+use std::{collections::HashMap, net::IpAddr};
 use std::fmt::Display;
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
@@ -22,6 +23,68 @@ impl Display for ConfigError {
             ConfigError::DuplicateEntry(msg) => format!("duplicate config entry: {}", msg),
             ConfigError::Other(msg) => format!("config error: {}", msg)
         })
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ConfigSectionRPC {
+    pub server_host: String,
+    pub server_port: u16
+}
+
+impl ConfigSectionRPC {
+    pub fn new(server_host: String, server_port: u16) -> Self {
+        Self { server_host, server_port }
+    }
+
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if let Err(err) = self.server_host.parse::<IpAddr>() {
+            return Err(ConfigError::InvalidEntry(format!("failed to parse server host: {}", err)));
+        }
+
+        if self.server_port == 0 {
+            return Err(ConfigError::InvalidEntry("invalid server port".to_string()));
+        }
+
+        Ok(())
+    }
+}
+
+impl Default for ConfigSectionRPC {
+    fn default() -> Self {
+        Self::new("0.0.0.0".to_string(), 30000)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ConfigSectionADB {
+    pub server_host: String,
+    pub server_port: u16,
+    pub read_timeout_ms: u64,
+    pub write_timeout_ms: u64
+}
+
+impl ConfigSectionADB {
+    pub fn new(server_host: String, server_port: u16, read_timeout_ms: u64, write_timeout_ms: u64) -> Self {
+        Self { server_host, server_port, read_timeout_ms, write_timeout_ms }
+    }
+
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if let Err(err) = format!("{}:{}", self.server_host, self.server_port).to_socket_addrs() {
+            return Err(ConfigError::InvalidEntry(format!("failed to parse server host: {}", err)));
+        }
+
+        if self.server_port == 0 {
+            return Err(ConfigError::InvalidEntry("invalid server port".to_string()));
+        }
+
+        Ok(())
+    }
+}
+
+impl Default for ConfigSectionADB {
+    fn default() -> Self {
+        Self::new("localhost".to_string(), 5037, 1000, 1000)
     }
 }
 
@@ -157,17 +220,17 @@ impl ConfigSectionControllers {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Configuration {
+    pub rpc_section: ConfigSectionRPC,
+    pub adb_section: ConfigSectionADB,
     pub gpio_section: ConfigSectionGPIO,
     pub device_section: ConfigSectionDevices,
     pub controller_section: ConfigSectionControllers
 }
 
 impl Configuration {
-    pub fn new(gpio_section: ConfigSectionGPIO, device_section: ConfigSectionDevices, controller_section: ConfigSectionControllers) -> Self {
-        Self { gpio_section, device_section, controller_section }
-    }
-
     pub fn validate(&self) -> Result<(), ConfigError> {
+        self.rpc_section.validate()?;
+        self.adb_section.validate()?;
         self.gpio_section.validate()?;
         self.device_section.validate()?;
         self.controller_section.validate()?;

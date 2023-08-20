@@ -99,7 +99,7 @@ impl AdbServer {
         self.device.lock().is_some()
     }
 
-    pub fn forward_port(
+    pub fn add_port(
         &self,
         port_type: PortType,
         local_port: u16,

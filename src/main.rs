@@ -3,10 +3,10 @@ mod bus;
 mod capabilities;
 mod config;
 mod device;
+mod drivers;
 mod gpio;
 mod rpc;
 mod tests;
-mod drivers;
 
 use config::{ConfigError, Configuration};
 use device::DeviceServer;
@@ -21,11 +21,12 @@ use std::{
     io::{BufReader, BufWriter},
     path::Path,
     sync::Arc,
+    time::Duration,
 };
 use tonic::transport::Server;
 
 use crate::{
-    adb::AdbServer,
+    adb::{AdbServer, PortType},
     rpc::{
         gps::{gps_server::GpsServer, GpsService},
         heartbeat::{heartbeat_server::HeartbeatServer, HeartbeatService},
@@ -42,7 +43,6 @@ use bus::raw_sysfs::SysfsRawBusController;
 use bus::uart::UARTBusController;
 use bus::BusController;
 
-const SERVE_ADDR: &str = "0.0.0.0:30000";
 const CONFIG_PATH: &str = "nvos_config.json";
 
 #[tokio::main]
@@ -184,8 +184,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let device_server = Arc::new(RwLock::new(device_server));
 
     info!("Starting ADB server connection");
-    let adb_server = Arc::new(RwLock::new(AdbServer::default()));
+    let adb_server = AdbServer::with_timeout(
+        &config.adb_section.server_host,
+        config.adb_section.server_port,
+        Duration::from_millis(config.adb_section.read_timeout_ms),
+        Duration::from_millis(config.adb_section.write_timeout_ms),
+    );
+    info!("Forwarding gRPC server port");
+    match adb_server.add_port(
+        PortType::Forward,
+        config.rpc_section.server_port,
+        config.rpc_section.server_port,
+        false,
+    ) {
+        Ok(_) => info!("Port forwarded: {}", config.rpc_section.server_port),
+        Err(err) => error!("Failed to forward port: {}", err),
+    }
 
+    // Prepare the ADB server for multi threading
+    let adb_server = Arc::new(RwLock::new(adb_server));
+
+    let serve_addr = format!(
+        "{}:{}",
+        config.rpc_section.server_host, config.rpc_section.server_port
+    );
     // Serve gRPC
     let rpc_server = Server::builder()
         .tcp_nodelay(true)
@@ -196,18 +218,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .add_service(tonic_web::enable(LedControllerServer::new(
             LEDControllerService::new(&device_server),
         )))
-        .add_service(tonic_web::enable(GpsServer::new(
-            GpsService::new(&device_server),
-        )))
+        .add_service(tonic_web::enable(GpsServer::new(GpsService::new(
+            &device_server,
+        ))))
         .add_service(tonic_web::enable(NetworkManagerServer::new(
             NetworkManagerService::new(&adb_server),
         )))
         .add_service(tonic_web::enable(HeartbeatServer::new(
             HeartbeatService::new(),
         )))
-        .serve(String::from(SERVE_ADDR).parse().unwrap());
+        .serve(serve_addr.parse().unwrap());
 
-    info!("Server running on {}!", SERVE_ADDR);
+    info!("Server running on {}!", serve_addr);
     rpc_server.await?;
     Ok(())
 }

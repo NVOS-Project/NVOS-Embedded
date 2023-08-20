@@ -49,7 +49,7 @@ impl NetworkManager for NetworkManagerService {
         };
 
         let server = self.server.read();
-        match server.forward_port(adb::PortType::Forward, server_port, device_port, true) {
+        match server.add_port(adb::PortType::Forward, server_port, device_port, true) {
             Ok(_) => Ok(Response::new(Void::default())),
             Err(e) => Err(Status::internal(format!("Failed to add port: {}", e)))
         }
@@ -67,7 +67,7 @@ impl NetworkManager for NetworkManagerService {
         };
 
         let server = self.server.read();
-        match server.forward_port(adb::PortType::Forward, server_port, device_port, false) {
+        match server.add_port(adb::PortType::Forward, server_port, device_port, false) {
             Ok(_) => Ok(Response::new(Void::default())),
             Err(e) => Err(Status::internal(format!("Failed to add port: {}", e)))
         }
