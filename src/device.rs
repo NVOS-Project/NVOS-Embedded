@@ -1,5 +1,6 @@
 use intertrait::CastFromSync;
 use intertrait::cast::{CastRef, CastMut};
+use log::warn;
 use uuid::Uuid;
 use crate::bus::BusController;
 use crate::capabilities::{Capability, CapabilityId};
@@ -177,7 +178,9 @@ impl DeviceServer {
     pub fn get_bus<T: BusController>(&self) -> Option<MappedRwLockReadGuard<'_, T>> {
         for controller in &self.bus_controllers {
             if controller.is_locked_exclusive() {
-                panic!("cannot enumerate bus controllers because one of them is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
+                warn!("cannot access controller because it is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
+                warn!("continuing to enumerate controllers, but this will yield the current controller invisible to the caller");
+                continue;
             }
 
             let r = controller.read();
@@ -192,7 +195,9 @@ impl DeviceServer {
     pub fn get_bus_mut<T: BusController>(&self) -> Option<MappedRwLockWriteGuard<'_, T>> {
         for controller in &self.bus_controllers {
             if controller.is_locked_exclusive() {
-                panic!("cannot enumerate controllers because one of them is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
+                warn!("cannot access controller because it is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
+                warn!("continuing to enumerate controllers, but this will yield the current controller invisible to the caller");
+                continue;
             }
 
             let r = controller.write();
@@ -207,7 +212,9 @@ impl DeviceServer {
     pub fn get_bus_ptr<T: BusController + 'static>(&self) -> Option<Arc<RwLock<T>>> {
         for controller in &self.bus_controllers {
             if controller.is_locked_exclusive() {
-                panic!("cannot enumerate controllers because one of them is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
+                warn!("cannot access controller because it is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
+                warn!("continuing to enumerate controllers, but this will yield the current controller invisible to the caller");
+                continue;
             }
 
             let _sanity_check = (*controller.read()).as_any().is::<T>();
