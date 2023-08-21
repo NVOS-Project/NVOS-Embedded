@@ -17,22 +17,26 @@ use rpc::reflection::{device_reflection_server::DeviceReflectionServer, DeviceRe
 use simple_logger::SimpleLogger;
 use std::{
     error::Error,
-    fs::{File, self},
+    fs::{self, File},
     io::{BufReader, BufWriter},
     path::Path,
     sync::Arc,
     time::Duration,
 };
+use tokio::sync::mpsc;
 use tonic::transport::Server;
+use uuid::Uuid;
 
 use crate::{
     adb::{AdbServer, PortType},
+    device::Device,
+    drivers::sysfs_led::SysfsLedController,
     rpc::{
         gps::{gps_server::GpsServer, GpsService},
         heartbeat::{heartbeat_server::HeartbeatServer, HeartbeatService},
         led::{led_controller_server::LedControllerServer, LEDControllerService},
         network::{network_manager_server::NetworkManagerServer, NetworkManagerService},
-    }, device::Device, drivers::sysfs_led::SysfsLedController,
+    },
 };
 use bus::i2c::I2CBusController;
 use bus::i2c_sysfs::SysfsI2CBusController;
@@ -167,13 +171,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     for device_config in &mut config.device_section.devices {
         info!("Initializing device: (driver: {})", device_config.driver);
-        let device_instance: Result<Box<dyn Device>, String> = match device_config.driver.to_lowercase().as_str() {
-            "sysfs_generic_led" => SysfsLedController::from_config(device_config)
-                .map(|device| Box::new(device) as Box<dyn Device>)
-                .map_err(|err| err.to_string()),
-            unknown_driver => Err(format!("Device driver {} is not implemented by this server",
-        unknown_driver))
-        };
+        let device_instance: Result<Box<dyn Device>, String> =
+            match device_config.driver.to_lowercase().as_str() {
+                "sysfs_generic_led" => SysfsLedController::from_config(device_config)
+                    .map(|device| Box::new(device) as Box<dyn Device>)
+                    .map_err(|err| err.to_string()),
+                unknown_driver => Err(format!(
+                    "Device driver {} is not implemented by this server",
+                    unknown_driver
+                )),
+            };
 
         match device_instance {
             Ok(d) => match device_server.register_device(d) {
@@ -196,7 +203,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let backup_path = CONFIG_PATH.to_string() + ".bak";
         match fs::copy(CONFIG_PATH, &backup_path) {
             Ok(_) => info!("Backed up config file to {}", backup_path),
-            Err(err) => warn!("Failed to backup config file: {}", err)
+            Err(err) => warn!("Failed to backup config file: {}", err),
         }
     }
 
@@ -235,8 +242,51 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Prepare the ADB server for multi threading
     let adb_server = Arc::new(RwLock::new(adb_server));
-    let serve_addr = config.rpc_section.server_host + ":" + &config.rpc_section.server_port.to_string();
+
+    // Prepare shutdown hook
+    let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
+    let device_server_ref = device_server.clone();
+    let adb_server_ref = adb_server.clone();
+    let mut tried_graceful_shutdown = false;
+    let ctrlc_result = ctrlc::set_handler(move || {
+        info!("Received shutdown signal");
+        if tried_graceful_shutdown {
+            info!("Already tried graceful shutdown, forcibly shutting down.");
+            panic!("Terminated");
+        }
+
+        tried_graceful_shutdown = true;
+
+        info!("Shutting down device server");
+        let mut ds = device_server_ref.write();
+        for id in ds
+            .get_devices()
+            .iter()
+            .map(|(k, _)| **k)
+            .collect::<Vec<Uuid>>()
+            .clone()
+        {
+            info!("Unloading device {}", id);
+            if let Err(err) = ds.remove_device(&id) {
+                error!("Failed to gracefully shutdown device {}: {}", id, err);
+            }
+        }
+
+        info!("Shutting down ADB server");
+        adb_server_ref.write().shutdown();
+
+        info!("Gracefully shutting down RPC server");
+        let _ = shutdown_tx.send(());
+    });
+
+    match ctrlc_result {
+        Ok(_) => info!("Shutdown handler set"),
+        Err(e) => warn!("Failed to set shutdown handler: {}", e),
+    }
+
     // Serve gRPC
+    let serve_addr =
+        config.rpc_section.server_host + ":" + &config.rpc_section.server_port.to_string();
     let rpc_server = Server::builder()
         .tcp_nodelay(true)
         .accept_http1(true)
@@ -255,7 +305,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .add_service(tonic_web::enable(HeartbeatServer::new(
             HeartbeatService::new(),
         )))
-        .serve(serve_addr.parse().unwrap());
+        .serve_with_shutdown(serve_addr.parse().unwrap(), async {
+            let _ = shutdown_rx.recv().await;
+        });
 
     info!("Server running on {}!", serve_addr);
     rpc_server.await?;
