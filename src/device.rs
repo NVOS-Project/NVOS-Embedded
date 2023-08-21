@@ -176,6 +176,10 @@ impl DeviceServer {
 
     pub fn get_bus<T: BusController>(&self) -> Option<MappedRwLockReadGuard<'_, T>> {
         for controller in &self.bus_controllers {
+            if controller.is_locked_exclusive() {
+                panic!("cannot enumerate bus controllers because one of them is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
+            }
+
             let r = controller.read();
             if (*r).as_any().is::<T>() {
                 return Some(RwLockReadGuard::map(r, |x| x.as_any().downcast_ref::<T>().unwrap()));
@@ -187,6 +191,10 @@ impl DeviceServer {
 
     pub fn get_bus_mut<T: BusController>(&self) -> Option<MappedRwLockWriteGuard<'_, T>> {
         for controller in &self.bus_controllers {
+            if controller.is_locked_exclusive() {
+                panic!("cannot enumerate controllers because one of them is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
+            }
+
             let r = controller.write();
             if (*r).as_any().is::<T>() {
                 return Some(RwLockWriteGuard::map(r, |x| x.as_any_mut().downcast_mut::<T>().unwrap()));
@@ -198,6 +206,10 @@ impl DeviceServer {
 
     pub fn get_bus_ptr<T: BusController + 'static>(&self) -> Option<Arc<RwLock<T>>> {
         for controller in &self.bus_controllers {
+            if controller.is_locked_exclusive() {
+                panic!("cannot enumerate controllers because one of them is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
+            }
+
             let _sanity_check = (*controller.read()).as_any().is::<T>();
             if _sanity_check {
                 let arc = Arc::clone(controller);
