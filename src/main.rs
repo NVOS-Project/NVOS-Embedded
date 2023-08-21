@@ -11,7 +11,7 @@ mod tests;
 use config::{ConfigError, Configuration};
 use device::DeviceServer;
 use gpio::{GpioBorrowChecker, PinState};
-use log::{error, info, warn, LevelFilter};
+use log::{error, info, warn, LevelFilter, debug};
 use parking_lot::RwLock;
 use rpc::reflection::{device_reflection_server::DeviceReflectionServer, DeviceReflectionService};
 use simple_logger::SimpleLogger;
@@ -184,7 +184,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         match device_instance {
             Ok(d) => match device_server.register_device(d) {
-                Ok(_) => info!("Device (driver: {}) is OK", device_config.driver),
+                Ok(id) => {
+                    info!("Device (driver: {}) is OK", device_config.driver);
+                    debug!("Device assigned address is {}", id);
+                    match device_server.get_device(&id) {
+                        Some(device) => {
+                            debug!("Device capabilities:");
+                            for cap in device.get_capabilities() {
+                                debug!("  - {:?}", cap);
+                            }
+                        }
+                        None => warn!("Failed to list device capabilities: device not found")
+                    }
+                },
                 Err(e) => error!(
                     "Failed to register device (driver: {}): {}",
                     device_config.driver, e
