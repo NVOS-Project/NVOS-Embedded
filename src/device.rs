@@ -3,7 +3,7 @@ use intertrait::cast::{CastRef, CastMut};
 use log::warn;
 use uuid::Uuid;
 use crate::bus::BusController;
-use crate::capabilities::{Capability, CapabilityId};
+use crate::capabilities::{Capability, CapabilityId, get_device_capabilities};
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -26,11 +26,7 @@ pub struct DeviceBox {
 
 impl DeviceBox {
     pub fn new(device: Box<dyn Device>) -> Self {
-        let cap_data = match device.cast::<dyn Capability>() {
-            Some(cap) => cap.get_capabilities(),
-            None => Vec::new(),
-        };
-
+        let cap_data = get_device_capabilities(device.unbox_ref());
         DeviceBox { device: device, capabilities: cap_data }
     }
 
