@@ -68,7 +68,13 @@ impl SysfsLedController {
 
         if config.power_off_gpio_state == config.power_on_gpio_state {
             return Err(DeviceError::InvalidConfig(
-                ConfigError::InvalidEntry("GPIO power states overlap".to_string()).to_string(),
+                ConfigError::InvalidEntry("GPIO values for power states overlap".to_string()).to_string(),
+            ));
+        }
+
+        if config.ir_mode_gpio_state == config.vis_mode_gpio_state {
+            return Err(DeviceError::InvalidConfig(
+                ConfigError::InvalidEntry("GPIO values for modes overlap".to_string()).to_string(),
             ));
         }
 
