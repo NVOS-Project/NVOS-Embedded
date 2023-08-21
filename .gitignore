@@ -1,3 +1,4 @@
 /target
 Cargo.lock
 nvos_config.json
+nvos_config.json.bak

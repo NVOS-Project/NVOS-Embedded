@@ -17,7 +17,7 @@ use rpc::reflection::{device_reflection_server::DeviceReflectionServer, DeviceRe
 use simple_logger::SimpleLogger;
 use std::{
     error::Error,
-    fs::File,
+    fs::{File, self},
     io::{BufReader, BufWriter},
     path::Path,
     sync::Arc,
@@ -191,6 +191,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     info!("Syncing config to disk");
+    if Path::new(CONFIG_PATH).exists() {
+        // Backup config
+        let backup_path = CONFIG_PATH.to_string() + ".bak";
+        match fs::copy(CONFIG_PATH, &backup_path) {
+            Ok(_) => info!("Backed up config file to {}", backup_path),
+            Err(err) => warn!("Failed to backup config file: {}", err)
+        }
+    }
+
     match File::create(CONFIG_PATH) {
         Ok(f) => {
             let writer = BufWriter::new(f);
@@ -226,11 +235,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Prepare the ADB server for multi threading
     let adb_server = Arc::new(RwLock::new(adb_server));
-
-    let serve_addr = format!(
-        "{}:{}",
-        config.rpc_section.server_host, config.rpc_section.server_port
-    );
+    let serve_addr = config.rpc_section.server_host + ":" + &config.rpc_section.server_port.to_string();
     // Serve gRPC
     let rpc_server = Server::builder()
         .tcp_nodelay(true)
