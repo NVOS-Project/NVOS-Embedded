@@ -24,14 +24,14 @@ pub trait Capability : CastFromSync {
     }
 }
 
-#[derive(Debug, EnumIter, Clone)]
+#[derive(Debug, EnumIter, Clone, Copy, PartialEq)]
 pub enum CapabilityId {
     LEDController,
     GPS
 }
 
 // Any capability APIs will go here
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum LEDMode {
     Visible,
     Infrared

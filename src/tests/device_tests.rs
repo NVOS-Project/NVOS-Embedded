@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use crate::bus::BusController;
-use crate::capabilities::Capability;
+use crate::capabilities::{Capability, LEDControllerCapable};
 use crate::device::{Device, DeviceError, DeviceServer, DeviceServerBuilder};
 use intertrait::cast_to;
 use parking_lot::RwLock;
@@ -245,6 +245,62 @@ impl SleepyDevice {
     }
 }
 
+struct DummyLedController;
+impl Device for DummyLedController {
+    fn name(&self) -> String {
+        "sleepy".to_string()
+    }
+
+    fn load(
+        &mut self, _parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
+        Ok(())
+    }
+
+    fn unload(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
+        Ok(())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl Capability for DummyLedController {}
+impl LEDControllerCapable for DummyLedController {
+    fn get_mode(&self) -> Result<crate::capabilities::LEDMode, DeviceError> {
+        todo!()
+    }
+
+    fn set_mode(&mut self, mode: crate::capabilities::LEDMode) -> Result<(), DeviceError> {
+        todo!()
+    }
+
+    fn get_brightness(&self) -> Result<f32, DeviceError> {
+        todo!()
+    }
+
+    fn set_brightness(&mut self, brightness: f32) -> Result<(), DeviceError> {
+        todo!()
+    }
+
+    fn get_power_state(&self) -> Result<bool, DeviceError> {
+        todo!()
+    }
+
+    fn set_power_state(&mut self, powered_on: bool) -> Result<(), DeviceError> {
+        todo!()
+    }
+}
+impl DummyLedController {
+    fn new() -> Self {
+        Self {}
+    }
+}
+
 #[test]
 fn ds_build_auto() {
     let server = DeviceServerBuilder::configure()
@@ -380,6 +436,18 @@ fn ds_get_devices() {
         if !device_names.is_empty() {
             panic!("expected devices not returned by the server: {:?}", &device_names);
         }
+}
+
+#[test]
+fn device_get_capabilities() {
+    let mut server = DeviceServerBuilder::configure()
+        .build().expect("failed to build server");
+
+    let id = server.register_device(Box::new(DummyLedController::new())).expect("failed to register device");
+    let device = server.get_device(&id).expect("failed to get device");
+    let caps = device.get_capabilities();
+    assert!(caps.contains(&crate::capabilities::CapabilityId::LEDController));
+    assert!(!caps.contains(&crate::capabilities::CapabilityId::GPS));
 }
 
 #[test]
