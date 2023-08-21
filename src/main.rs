@@ -32,7 +32,7 @@ use crate::{
         heartbeat::{heartbeat_server::HeartbeatServer, HeartbeatService},
         led::{led_controller_server::LedControllerServer, LEDControllerService},
         network::{network_manager_server::NetworkManagerServer, NetworkManagerService},
-    },
+    }, device::Device, drivers::sysfs_led::SysfsLedController,
 };
 use bus::i2c::I2CBusController;
 use bus::i2c_sysfs::SysfsI2CBusController;
@@ -165,7 +165,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
         warn!("Config does not have any device entries.");
     }
 
-    // TODO: register the devices...
+    for device_config in &mut config.device_section.devices {
+        info!("Initializing device: (driver: {})", device_config.driver);
+        let device_instance: Result<Box<dyn Device>, String> = match device_config.driver.to_lowercase().as_str() {
+            "sysfs_generic_led" => SysfsLedController::from_config(device_config)
+                .map(|device| Box::new(device) as Box<dyn Device>)
+                .map_err(|err| err.to_string()),
+            unknown_driver => Err(format!("Device driver {} is not implemented by this server",
+        unknown_driver))
+        };
+
+        match device_instance {
+            Ok(d) => match device_server.register_device(d) {
+                Ok(_) => info!("Device (driver: {}) is OK", device_config.driver),
+                Err(e) => error!(
+                    "Failed to register device (driver: {}): {}",
+                    device_config.driver, e
+                ),
+            },
+            Err(e) => error!(
+                "Failed to build device (driver: {}): {}",
+                device_config.driver, e
+            ),
+        }
+    }
 
     info!("Syncing config to disk");
     match File::create(CONFIG_PATH) {
