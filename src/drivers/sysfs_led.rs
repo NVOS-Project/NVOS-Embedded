@@ -4,6 +4,7 @@ use crate::{
     config::{ConfigError, DeviceConfig},
     device::{Device, DeviceError, DeviceServer},
 };
+use intertrait::cast_to;
 use log::{warn, debug};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -267,6 +268,7 @@ impl Device for SysfsLedController {
 
 impl Capability for SysfsLedController {}
 
+#[cast_to]
 impl LEDControllerCapable for SysfsLedController {
     fn get_mode(&self) -> Result<LEDMode, DeviceError> {
         if !self.is_loaded {
