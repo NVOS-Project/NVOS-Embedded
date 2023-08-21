@@ -7,7 +7,7 @@ use log::warn;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, sync::Arc, path::Path};
+use std::{collections::HashMap, sync::Arc, path::Path, fs::OpenOptions, io::Write};
 use sysfs_pwm::{Error, Pwm};
 use uuid::Uuid;
 
@@ -166,6 +166,15 @@ impl SysfsPWMBusController {
                     ),
                 )
             })?;
+
+        // Try to reset PWM polarity if supported
+        // error out if polarity can't be set
+        let polarity_path = Path::new(SYSFS_PWM_PATH).join(format!("pwmchip{}/pwm{}/polarity", pwm_data.chip_num, pwm_data.chip_channel));
+        if polarity_path.exists() {
+            OpenOptions::new().write(true).open(polarity_path)
+                .and_then(|mut fd| fd.write_all(b"normal"))
+                .map_err(|err| PWMError::HardwareError(format!("failed to reset PWM polarity: {}", err)))?;
+        }
 
         let borrow_id = borrow_checker.borrow_one(pwm_data.gpio_num)
             .map_err(|err| PWMError::HardwareError(err.to_string()))?;

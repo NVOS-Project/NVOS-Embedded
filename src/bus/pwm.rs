@@ -169,6 +169,13 @@ impl PWMBusController {
         let bus = Pwm::new(u8_to_channel(channel).unwrap())
             .map_err(|err| rppal_map_err(err, &format!("Internal RPPAL error while opening PWM channel {}", channel)))?;
 
+        // Operation not be supported
+        // for now just emit a warning
+        // TODO: add a support check and error out if we still can't set the polarity
+        if let Err(err) = bus.set_polarity(rppal::pwm::Polarity::Normal) {
+            warn!("Failed to reset PWM polarity: {}", err);
+        }
+
         let borrow_id = borrow_checker.borrow_one(*pin)
             .map_err(|err| PWMError::HardwareError(err.to_string()))?;
         

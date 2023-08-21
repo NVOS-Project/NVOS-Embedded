@@ -4,7 +4,7 @@ use crate::{
     config::{ConfigError, DeviceConfig},
     device::{Device, DeviceError, DeviceServer},
 };
-use log::warn;
+use log::{warn, debug};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::any::Any;
@@ -299,6 +299,7 @@ impl LEDControllerCapable for SysfsLedController {
         let pin = self.mode_switch_pin.as_ref().unwrap();
         match pin.set_value(gpio_value) {
             Ok(_) => {
+                debug!("new mode: {:?}", mode);
                 self.mode = mode;
                 Ok(())
             }
@@ -351,6 +352,7 @@ impl LEDControllerCapable for SysfsLedController {
             )));
         }
 
+        debug!("new brightness: {}", brightness);
         self.brightness = brightness;
         Ok(())
     }
@@ -396,6 +398,7 @@ impl LEDControllerCapable for SysfsLedController {
             )));
         }
 
+        debug!("new power state: {}", powered_on);
         self.power_state_on = powered_on;
         Ok(())
     }
