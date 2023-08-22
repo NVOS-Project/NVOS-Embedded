@@ -38,6 +38,6 @@ This repository contains the embedded firmware that drives the NVOS root control
   - Compass: ❌
   - LED: ✔️
 - ### Device drivers:
-  - LED (???): ❌
+  - LED (sysfs_generic_led): ✔️
   - GPS (gps_uart): ❌
   - Compass (???): ❌
