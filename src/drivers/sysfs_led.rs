@@ -188,6 +188,10 @@ impl Device for SysfsLedController {
             }
         };
 
+        if let Err(e) = brightness_pin.enable(true) {
+            warn!("Failed to enable brightness PWM channel: {}", e);
+        }
+
         self.mode_switch_pin = Some(mode_switch_pin);
         self.brightness_pin = Some(brightness_pin);
 
@@ -242,6 +246,10 @@ impl Device for SysfsLedController {
                 Some(bus) => bus,
                 None => return Err(DeviceError::MissingController("sysfs_pwm".to_string())),
             };
+
+            if let Err(e) = self.brightness_pin.as_ref().unwrap().enable(false) {
+                warn!("Failed to disable brightness PWM channel: {}", e);
+            }
 
             if let Err(e) = pwm.close(self.config.brightness_pwm_channel) {
                 warn!(
