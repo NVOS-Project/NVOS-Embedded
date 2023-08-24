@@ -1,28 +1,27 @@
-use intertrait::CastFromSync;
 use intertrait::cast::CastRef;
 use nmea::{Satellite, Nmea};
 use serde::{Serialize, Deserialize};
 use strum::{EnumIter, IntoEnumIterator};
 
-use crate::device::DeviceError;
+use crate::device::{DeviceError, Device};
 
-pub trait Capability : CastFromSync {
-    fn get_capabilities(&self) -> Vec<CapabilityId> {
-        let mut capabilities = Vec::<CapabilityId>::new();
-        for capability in CapabilityId::iter() {
-            let has_capability = match capability {
-                CapabilityId::LEDController => self.cast::<dyn LEDControllerCapable>().is_some(),
-                CapabilityId::GPS => self.cast::<dyn GpsCapable>().is_some()
-            };
+pub fn get_device_capabilities<T: Device + ?Sized>(device: &T) -> Vec<CapabilityId> {
+    let mut capabilities = Vec::<CapabilityId>::new();
+    for capability in CapabilityId::iter() {
+        let has_capability = match capability {
+            CapabilityId::LEDController => device.cast::<dyn LEDControllerCapable>().is_some(),
+            CapabilityId::GPS => device.cast::<dyn GpsCapable>().is_some()
+        };
 
-            if has_capability {
-                capabilities.push(capability);
-            }
+        if has_capability {
+            capabilities.push(capability);
         }
-
-        capabilities
     }
+
+    capabilities
 }
+
+pub trait Capability {}
 
 #[derive(Debug, EnumIter, Clone, Copy, PartialEq)]
 pub enum CapabilityId {

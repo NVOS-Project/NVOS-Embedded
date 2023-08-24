@@ -270,6 +270,8 @@ impl Device for DummyLedController {
 }
 
 impl Capability for DummyLedController {}
+
+#[cast_to]
 impl LEDControllerCapable for DummyLedController {
     fn get_mode(&self) -> Result<crate::capabilities::LEDMode, DeviceError> {
         todo!()
