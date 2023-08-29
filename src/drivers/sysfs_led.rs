@@ -92,6 +92,12 @@ impl SysfsLedController {
             ));
         }
 
+        if config.pwm_100_brightness_duty_cycle > config.pwm_period {
+            return Err(DeviceError::InvalidConfig(
+                ConfigError::InvalidEntry("PWM duty cycle cannot be larger than the period".to_string()).to_string()
+            ));
+        }
+
         Ok(Self {
             config: config,
             address: None,
