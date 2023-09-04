@@ -157,7 +157,12 @@ impl Device for SysfsLedController {
     }
 
     fn load(&mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
-        self.address = Some(address);
+        if self.is_loaded {
+            return Err(DeviceError::InvalidOperation(
+                "device load requested but this device is already loaded".to_string(),
+            ));
+        }
+
         let mut gpio = match parent.get_bus_mut::<SysfsRawBusController>() {
             Some(bus) => bus,
             None => return Err(DeviceError::MissingController("sysfs_raw".to_string())),
@@ -198,6 +203,7 @@ impl Device for SysfsLedController {
             warn!("Failed to enable brightness PWM channel: {}", e);
         }
 
+        self.address = Some(address);
         self.mode_switch_pin = Some(mode_switch_pin);
         self.brightness_pin = Some(brightness_pin);
 
@@ -218,7 +224,7 @@ impl Device for SysfsLedController {
 
     fn unload(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError> {
         if !self.is_loaded {
-            return Err(DeviceError::Other(
+            return Err(DeviceError::InvalidOperation(
                 "device unload requested but this device isn't loaded".to_string(),
             ));
         }
@@ -268,6 +274,7 @@ impl Device for SysfsLedController {
         }
 
         self.is_loaded = false;
+        self.address = None;
         Ok(())
     }
 
