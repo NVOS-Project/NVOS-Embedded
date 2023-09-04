@@ -35,13 +35,13 @@ impl Port {
 }
 
 #[derive(Clone, Debug)]
-enum AdbMessage {
+enum WorkerMessage {
     Shutdown,
 }
 
 pub struct AdbServer {
     device: Arc<Mutex<Option<Device>>>,
-    channel: broadcast::Sender<AdbMessage>,
+    channel: broadcast::Sender<WorkerMessage>,
     forwarded_connections: Arc<RwLock<Vec<Port>>>,
 }
 
@@ -67,7 +67,7 @@ impl AdbServer {
         adb_host.read_timeout = Some(read_timeout);
         adb_host.write_timeout = Some(write_timeout);
 
-        let (sender, receiver) = broadcast::channel::<AdbMessage>(16);
+        let (sender, receiver) = broadcast::channel::<WorkerMessage>(16);
         let server = Self {
             device: Arc::new(Mutex::new(None)),
             channel: sender,
@@ -215,7 +215,7 @@ impl AdbServer {
 
     pub fn shutdown(&self) {
         debug!("Shutting down ADB server");
-        let _ = self.channel.send(AdbMessage::Shutdown);
+        let _ = self.channel.send(WorkerMessage::Shutdown);
     }
 }
 
@@ -235,7 +235,7 @@ struct AdbServerWorker {
     host: Host,
     device: Arc<Mutex<Option<Device>>>,
     forwarded_connections: Arc<RwLock<Vec<Port>>>,
-    channel: broadcast::Receiver<AdbMessage>,
+    channel: broadcast::Receiver<WorkerMessage>,
     is_connected: bool,
 }
 
@@ -244,7 +244,7 @@ impl AdbServerWorker {
         host: Host,
         device: Arc<Mutex<Option<Device>>>,
         forwarded_connections: Arc<RwLock<Vec<Port>>>,
-        channel: broadcast::Receiver<AdbMessage>,
+        channel: broadcast::Receiver<WorkerMessage>,
     ) -> Self {
         Self {
             host,
@@ -267,12 +267,8 @@ impl AdbServerWorker {
                     }
 
                     match signal.unwrap() {
-                        AdbMessage::Shutdown => {
+                        WorkerMessage::Shutdown => {
                             debug!("Received shutdown signal, stopping...");
-                            break;
-                        },
-                        other => {
-                            error!("ADB server worker received unsupported signal: {:?}", other);
                             break;
                         }
                     }
