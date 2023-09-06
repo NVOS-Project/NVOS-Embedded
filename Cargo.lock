@@ -776,7 +776,7 @@ dependencies = [
 
 [[package]]
 name = "nvos_embedded"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ctrlc",
  "i2c-linux",

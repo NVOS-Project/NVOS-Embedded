@@ -11,7 +11,7 @@ mod tests;
 use config::{ConfigError, Configuration};
 use device::DeviceServer;
 use gpio::{GpioBorrowChecker, PinState};
-use log::{error, info, warn, LevelFilter, debug};
+use log::{error, info, warn, LevelFilter, debug, SetLoggerError};
 use parking_lot::RwLock;
 use rpc::reflection::{device_reflection_server::DeviceReflectionServer, DeviceReflectionService};
 use simple_logger::SimpleLogger;
@@ -30,7 +30,7 @@ use uuid::Uuid;
 use crate::{
     adb::{AdbServer, PortType},
     device::Device,
-    drivers::sysfs_led::SysfsLedController,
+    drivers::{sysfs_led::SysfsLedController, gps_uart::UartGps},
     rpc::{
         gps::{gps_server::GpsServer, GpsService},
         heartbeat::{heartbeat_server::HeartbeatServer, HeartbeatService},
@@ -49,13 +49,25 @@ use bus::BusController;
 
 const CONFIG_PATH: &str = "nvos_config.json";
 
+#[cfg(debug_assertions)]
+fn setup_logger()  -> Result<(), SetLoggerError>{
+    SimpleLogger::new()
+    .with_colors(true)
+    .with_level(LevelFilter::Debug)
+    .init()
+}
+
+#[cfg(not(debug_assertions))]
+fn setup_logger() -> Result<(), SetLoggerError> {
+    SimpleLogger::new()
+    .with_colors(true)
+    .with_level(LevelFilter::Info)
+    .init()
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    SimpleLogger::new()
-        .with_colors(true)
-        .with_level(LevelFilter::Debug)
-        .init()?;
-
+    setup_logger()?;
     info!("Loading configuration file at {}", CONFIG_PATH);
     let mut config;
 
@@ -174,6 +186,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let device_instance: Result<Box<dyn Device>, String> =
             match device_config.driver.to_lowercase().as_str() {
                 "sysfs_generic_led" => SysfsLedController::from_config(device_config)
+                    .map(|device| Box::new(device) as Box<dyn Device>)
+                    .map_err(|err| err.to_string()),
+                "gps_uart" => UartGps::from_config(device_config)
                     .map(|device| Box::new(device) as Box<dyn Device>)
                     .map_err(|err| err.to_string()),
                 unknown_driver => Err(format!(

@@ -354,8 +354,8 @@ impl AdbServerWorker {
                 *guard = Some(device);
                 return true;
             }
-            Err(e) => {
-                debug!("Failed to obtain a device connection: {}", e);
+            Err(_) => {
+                // No devices or unauthorized
                 return false;
             }
         }

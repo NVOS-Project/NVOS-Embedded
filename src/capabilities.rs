@@ -52,7 +52,7 @@ pub trait GpsCapable : Capability {
     fn get_speed(&self) -> Result<f32, DeviceError>;
     fn get_heading(&self) -> Result<f32, DeviceError>;
     fn get_satellites(&self) -> Result<Vec<Satellite>, DeviceError>;
-    fn get_nmea(&self) -> Result<&Nmea, DeviceError>;
+    fn get_nmea(&self) -> Result<Nmea, DeviceError>;
     fn get_vertical_accuracy(&self) -> Result<f32, DeviceError>;
     fn get_horizontal_accuracy(&self) -> Result<f32, DeviceError>;
 }
