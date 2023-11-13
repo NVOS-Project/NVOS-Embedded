@@ -1,6 +1,6 @@
 use crate::{
     bus::uart::UARTBusController,
-    device::{Device, DeviceError}, config::{DeviceConfig, ConfigError}, capabilities::{GpsCapable, Capability},
+    device::{DeviceDriver, DeviceError}, config::{DeviceConfig, ConfigError}, capabilities::{GpsCapable, Capability},
 };
 use intertrait::cast_to;
 use log::{debug, warn};
@@ -190,13 +190,13 @@ impl UartGps {
     }
 
     pub fn from_config(config: &mut DeviceConfig) -> Result<Self, DeviceError> {
-        let data: UartGpsConfig = match serde_json::from_value(config.data.clone()) {
+        let data: UartGpsConfig = match serde_json::from_value(config.driver_data.clone()) {
             Ok(d) => d,
             Err(e) => {
-                if config.data == Value::Null {
+                if config.driver_data == Value::Null {
                     match serde_json::to_value(UartGpsConfig::default()) {
                         Ok(c) => {
-                            config.data = c;
+                            config.driver_data = c;
                             return Err(DeviceError::InvalidConfig(
                                 ConfigError::MissingEntry(
                                     "device was missing config data, default config was written"
@@ -240,12 +240,12 @@ impl UartGps {
     }
 }
 
-impl Device for UartGps {
+impl DeviceDriver for UartGps {
     fn name(&self) -> String {
         "gps_uart".to_string()
     }
 
-    fn load(
+    fn start(
         &mut self,
         parent: &mut crate::device::DeviceServer,
         address: Uuid,
@@ -301,7 +301,7 @@ impl Device for UartGps {
         Ok(())
     }
 
-    fn unload(&mut self, parent: &mut crate::device::DeviceServer) -> Result<(), DeviceError> {
+    fn stop(&mut self, parent: &mut crate::device::DeviceServer) -> Result<(), DeviceError> {
         if !self.is_loaded {
             return Err(DeviceError::InvalidOperation(
                 "device unload requested but this device isn't loaded".to_string(),

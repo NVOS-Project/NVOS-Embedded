@@ -126,16 +126,17 @@ impl ConfigSectionGPIO {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DeviceConfig {
     pub driver: String,
-    pub data: Value
+    pub friendly_name: Option<String>,
+    pub driver_data: Value
 }
 
 impl DeviceConfig {
-    pub fn new(driver: String, data: Value) -> Self {
-        Self { driver, data }
+    pub fn new(driver: String, friendly_name: Option<String>, driver_data: Value) -> Self {
+        Self { driver, friendly_name, driver_data }
     }
 
-    pub fn new_without_data(driver: String) -> Self {
-        Self { driver, data: Value::Null }
+    pub fn new_without_data(driver: String, friendly_name: Option<String>) -> Self {
+        Self { driver, friendly_name, driver_data: Value::Null }
     }
 
     pub fn validate(&self) -> Result<(), ConfigError> {

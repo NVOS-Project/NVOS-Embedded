@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::bus::BusController;
 use crate::capabilities::{Capability, LEDControllerCapable};
-use crate::device::{Device, DeviceError, DeviceServer, DeviceServerBuilder};
+use crate::device::{DeviceDriver, DeviceError, DeviceServer, DeviceServerBuilder};
 use intertrait::cast_to;
 use parking_lot::RwLock;
 use uuid::Uuid;
@@ -93,17 +93,17 @@ struct SleepyDevice {
     is_resting: bool
 }
 
-impl Device for NoCapDevice {
+impl DeviceDriver for NoCapDevice {
     fn name(&self) -> String {
         "nocap".to_string()
     }
 
-    fn load(&mut self, _parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
+    fn start(&mut self, _parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
         self.address = Some(address);
         Ok(())
     }
 
-    fn unload(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
+    fn stop(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
         self.address = None;
         Ok(())
     }
@@ -125,12 +125,12 @@ impl NoCapDevice {
     }
 }
 
-impl Device for FunDevice {
+impl DeviceDriver for FunDevice {
     fn name(&self) -> String {
         "fun".to_string()
     }
 
-    fn load(
+    fn start(
         &mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
         self.address = Some(address);
         self.fun_controller = match parent.get_bus_ptr() {
@@ -140,7 +140,7 @@ impl Device for FunDevice {
         Ok(())
     }
 
-    fn unload(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
+    fn stop(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
         self.address = None;
         Ok(())
     }
@@ -190,18 +190,18 @@ impl FunDevice {
     }
 }
 
-impl Device for SleepyDevice {
+impl DeviceDriver for SleepyDevice {
     fn name(&self) -> String {
         "sleepy".to_string()
     }
 
-    fn load(
+    fn start(
         &mut self, _parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
         self.address = Some(address);
         Ok(())
     }
 
-    fn unload(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
+    fn stop(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
         self.address = None;
         Ok(())
     }
@@ -246,17 +246,17 @@ impl SleepyDevice {
 }
 
 struct DummyLedController;
-impl Device for DummyLedController {
+impl DeviceDriver for DummyLedController {
     fn name(&self) -> String {
         "sleepy".to_string()
     }
 
-    fn load(
+    fn start(
         &mut self, _parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
         Ok(())
     }
 
-    fn unload(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
+    fn stop(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
         Ok(())
     }
 

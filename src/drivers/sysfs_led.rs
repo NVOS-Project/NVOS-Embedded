@@ -2,7 +2,7 @@ use crate::{
     bus::{pwm_sysfs::SysfsPWMBusController, raw_sysfs::SysfsRawBusController},
     capabilities::{Capability, LEDControllerCapable, LEDMode},
     config::{ConfigError, DeviceConfig},
-    device::{Device, DeviceError, DeviceServer},
+    device::{DeviceDriver, DeviceError, DeviceServer},
 };
 use intertrait::cast_to;
 use log::{warn, debug};
@@ -111,13 +111,13 @@ impl SysfsLedController {
     }
 
     pub fn from_config(config: &mut DeviceConfig) -> Result<Self, DeviceError> {
-        let data: SysfsLedControllerConfig = match serde_json::from_value(config.data.clone()) {
+        let data: SysfsLedControllerConfig = match serde_json::from_value(config.driver_data.clone()) {
             Ok(d) => d,
             Err(e) => {
-                if config.data == Value::Null {
+                if config.driver_data == Value::Null {
                     match serde_json::to_value(SysfsLedControllerConfig::default()) {
                         Ok(c) => {
-                            config.data = c;
+                            config.driver_data = c;
                             return Err(DeviceError::InvalidConfig(
                                 ConfigError::MissingEntry(
                                     "device was missing config data, default config was written"
@@ -151,12 +151,12 @@ impl SysfsLedController {
     }
 }
 
-impl Device for SysfsLedController {
+impl DeviceDriver for SysfsLedController {
     fn name(&self) -> String {
         "sysfs_generic_led".to_string()
     }
 
-    fn load(&mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
+    fn start(&mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
         if self.is_loaded {
             return Err(DeviceError::InvalidOperation(
                 "device load requested but this device is already loaded".to_string(),
@@ -222,7 +222,7 @@ impl Device for SysfsLedController {
         Ok(())
     }
 
-    fn unload(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError> {
+    fn stop(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError> {
         if !self.is_loaded {
             return Err(DeviceError::InvalidOperation(
                 "device unload requested but this device isn't loaded".to_string(),
