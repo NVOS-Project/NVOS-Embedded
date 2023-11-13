@@ -40,11 +40,12 @@ pub struct Device {
 }
 
 impl Device {
-    pub fn from_driver(address: Uuid, driver: Box<dyn DeviceDriver>, friendly_name: Option<String>) -> Result<Self, DeviceError> {
+    pub fn from_driver(driver: Box<dyn DeviceDriver>, address: Option<Uuid>, friendly_name: Option<String>) -> Result<Self, DeviceError> {
         if friendly_name.is_some_and(|x| x.is_empty()) {
             return Err(DeviceError::InvalidConfig("invalid device name".to_string()))
         }
 
+        let address = address.unwrap_or(Uuid::new_v4());
         let name = friendly_name.unwrap_or(format!("{}-{}", driver.name(), address));
         let cap_data = get_device_capabilities(driver.unbox_ref());
 
@@ -56,14 +57,14 @@ impl Device {
         })
     }
 
-    pub fn from_config<T: DeviceDriver>(address: Uuid, config: &mut DeviceConfig) -> Result<Self, DeviceError> {
+    pub fn from_config<T: DeviceDriver>(config: &mut DeviceConfig, address: Option<Uuid>) -> Result<Self, DeviceError> {
         let driver: Box<dyn DeviceDriver> = Box::new(T::new(Some(config))?) as Box<dyn DeviceDriver>;
-        Self::from_driver(address, driver, config.friendly_name)
+        Self::from_driver(driver, address, config.friendly_name)
     }
 
-    pub fn new<T: DeviceDriver>(address: Uuid, friendly_name: Option<String>) -> Result<Self, DeviceError> {
+    pub fn new<T: DeviceDriver>(address: Option<Uuid>, friendly_name: Option<String>) -> Result<Self, DeviceError> {
         let driver: Box<dyn DeviceDriver> = Box::new(T::new(None)?) as Box<dyn DeviceDriver>;
-        Self::from_driver(address, driver, friendly_name)
+        Self::from_driver(driver, address, friendly_name)
     }
 
     pub fn address(&self) -> Uuid {
