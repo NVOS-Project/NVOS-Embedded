@@ -430,7 +430,7 @@ fn ds_get_buses() {
 
 #[test]
 fn ds_get_devices() {
-    let mut device_names = vec!["nocap", "fun", "sleepy"];
+    let mut driver_names = vec!["nocap", "fun", "sleepy"];
     let mut server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
         .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
@@ -439,20 +439,20 @@ fn ds_get_devices() {
         .build(true).expect("failed to build server");
 
         for (_, device) in server.get_devices() {
-            let device_name = device.as_ref().name();
-            if device_names.len() == 0 {
-                panic!("all expected device names have been seen but get_devices returned another device: {}", &device_name);
+            let driver_name = device.driver_name();
+            if driver_names.len() == 0 {
+                panic!("all expected driver names have been seen but get_devices returned another device: {}", &driver_name);
             }
     
-            if let Some(index) = device_names.iter().position(|&name| name == device_name) {
-                device_names.remove(index);
+            if let Some(index) = driver_names.iter().position(|&name| name == driver_name) {
+                driver_names.remove(index);
             } else {
-                panic!("duplicate device returned: {}", &device_name);
+                panic!("duplicate device returned: {}", &driver_name);
             }
         }
     
-        if !device_names.is_empty() {
-            panic!("expected devices not returned by the server: {:?}", &device_names);
+        if !driver_names.is_empty() {
+            panic!("expected devices not returned by the server: {:?}", &driver_names);
         }
 }
 
@@ -610,4 +610,47 @@ fn ds_bus_ptr_access() {
     assert_eq!(fun.read().get_fun_count(), 0);
     assert_eq!(fun.write().increase_fun().unwrap(), 1);
     assert_eq!(fun.read().get_fun_count(), 1);
+}
+
+#[test]
+fn start_devices_test() {
+    let address = Uuid::new_v4();
+    let server = DeviceServerBuilder::configure()
+        .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
+        .build(true).expect("failed to build server");
+
+    let device = server.get_device(&address).expect("failed to get device by id");
+    assert_eq!(device.is_running(), true);
+}
+
+#[test]
+fn device_start_test() {
+    let address = Uuid::new_v4();
+    let mut server = DeviceServerBuilder::configure()
+        .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
+        .build(false).expect("failed to build server");
+
+    let device = server.get_device(&address).expect("failed to get device by id");
+    assert_eq!(device.is_running(), false);
+
+    server.start_device(&address).expect("failed to start device");
+    assert_eq!(device.is_running(), true);
+
+    server.start_device(&address).expect_err("started device twice");
+}
+
+#[test]
+fn stop_device_test() {
+    let address = Uuid::new_v4();
+    let mut server = DeviceServerBuilder::configure()
+        .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
+        .build(true).expect("failed to build server");
+
+    let device = server.get_device(&address).expect("failed to get device by id");
+    assert_eq!(device.is_running(), true);
+
+    server.stop_device(&address).expect("failed to stop device");
+    assert_eq!(device.is_running(), false);
+
+    server.stop_device(&address).expect_err("attempted to stop device twice");
 }
