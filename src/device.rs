@@ -140,6 +140,7 @@ impl Display for DeviceError {
         })
     }
 }
+
 pub struct DeviceServer {
     bus_controllers: Vec<Arc<RwLock<dyn BusController>>>,
     devices: HashMap<Uuid, Device>

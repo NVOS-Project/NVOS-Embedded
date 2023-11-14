@@ -654,3 +654,27 @@ fn stop_device_test() {
 
     server.stop_device(&address).expect_err("attempted to stop device twice");
 }
+
+#[test]
+fn duplicate_address_test() {
+    let address = Uuid::new_v4();
+    let mut server = DeviceServerBuilder::configure()
+        .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
+        .build(true);
+
+    assert!(server.is_ok(), "somehow managed to add multiple duplicates");
+}
+
+#[test]
+fn duplicate_name_test() {
+    let name = "some_device".to_owned();
+    let mut server = DeviceServerBuilder::configure()
+        .add_device(Device::new::<SleepyDevice>(None, Some(name)).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, Some(name)).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, Some(name)).unwrap())
+        .build(true);
+
+    assert!(server.is_ok(), "somehow managed to add multiple duplicates");
+}
