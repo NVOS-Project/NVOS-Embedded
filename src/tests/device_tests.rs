@@ -1,10 +1,9 @@
 use std::any::{Any, TypeId};
-use std::cell::RefCell;
 use std::sync::Arc;
 
 use crate::bus::BusController;
 use crate::capabilities::{Capability, LEDControllerCapable};
-use crate::device::{DeviceDriver, DeviceError, DeviceServer, DeviceServerBuilder};
+use crate::device::{DeviceDriver, DeviceError, DeviceServer, DeviceServerBuilder, Device};
 use intertrait::cast_to;
 use parking_lot::RwLock;
 use uuid::Uuid;
@@ -82,14 +81,14 @@ trait SleepCapable: Capability {
 }
 
 struct NoCapDevice {
-    address: Option<Uuid>
+    is_loaded: bool
 }
 struct FunDevice {
-    address: Option<Uuid>,
+    is_loaded: bool,
     fun_controller: Option<Arc<RwLock<FunController>>>
 }
 struct SleepyDevice {
-    address: Option<Uuid>,
+    is_loaded: bool,
     is_resting: bool
 }
 
@@ -98,13 +97,23 @@ impl DeviceDriver for NoCapDevice {
         "nocap".to_string()
     }
 
-    fn start(&mut self, _parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
-        self.address = Some(address);
+    fn is_running(&self) -> bool {
+        self.is_loaded
+    }
+
+    fn new(config: Option<&mut crate::config::DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
+        Ok(NoCapDevice {
+            is_loaded: false
+        })
+    }
+
+    fn start(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
+        self.is_loaded = true;
         Ok(())
     }
 
     fn stop(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
-        self.address = None;
+        self.is_loaded = false;
         Ok(())
     }
 
@@ -117,22 +126,25 @@ impl DeviceDriver for NoCapDevice {
     }
 }
 
-impl NoCapDevice {
-    fn new() -> Self {
-        NoCapDevice {
-            address: None
-        }
-    }
-}
-
 impl DeviceDriver for FunDevice {
     fn name(&self) -> String {
         "fun".to_string()
     }
 
+    fn is_running(&self) -> bool {
+        self.is_loaded
+    }
+
+    fn new(config: Option<&mut crate::config::DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
+        Ok(FunDevice { 
+            is_loaded: false, 
+            fun_controller: None 
+        })
+    }
+
     fn start(
-        &mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
-        self.address = Some(address);
+        &mut self, parent: &mut DeviceServer) -> Result<(), DeviceError> {
+        self.is_loaded = true;
         self.fun_controller = match parent.get_bus_ptr() {
             Some(c) => Some(c),
             None => return Err(DeviceError::MissingController("FUN".to_string()))
@@ -141,7 +153,7 @@ impl DeviceDriver for FunDevice {
     }
 
     fn stop(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
-        self.address = None;
+        self.is_loaded = false;
         Ok(())
     }
 
@@ -181,28 +193,31 @@ impl FunCapable for FunDevice {
     }
 }
 impl Capability for FunDevice {}
-impl FunDevice {
-    fn new() -> Self {
-        FunDevice {
-            address: None,
-            fun_controller: None
-        }
-    }
-}
 
 impl DeviceDriver for SleepyDevice {
     fn name(&self) -> String {
         "sleepy".to_string()
     }
 
+    fn is_running(&self) -> bool {
+        self.is_loaded
+    }
+
+    fn new(config: Option<&mut crate::config::DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
+        Ok(SleepyDevice { 
+            is_loaded: false, 
+            is_resting: false 
+        })
+    }
+
     fn start(
-        &mut self, _parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
-        self.address = Some(address);
+        &mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
+        self.is_loaded = true;
         Ok(())
     }
 
     fn stop(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
-        self.address = None;
+        self.is_loaded = false;
         Ok(())
     }
 
@@ -236,27 +251,33 @@ impl SleepCapable for SleepyDevice {
     }
 }
 impl Capability for SleepyDevice {}
-impl SleepyDevice {
-    fn new() -> Self {
-        SleepyDevice {
-            address: None,
-            is_resting: false
-        }
-    }
-}
 
-struct DummyLedController;
+struct DummyLedController {
+    is_loaded: bool
+}
 impl DeviceDriver for DummyLedController {
     fn name(&self) -> String {
         "sleepy".to_string()
     }
 
+    fn is_running(&self) -> bool {
+        self.is_loaded
+    }
+
+    fn new(config: Option<&mut crate::config::DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
+        Ok(DummyLedController { 
+            is_loaded: false
+        })
+    }
+
     fn start(
-        &mut self, _parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
+        &mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
+        self.is_loaded = true;
         Ok(())
     }
 
     fn stop(&mut self, _parent: &mut DeviceServer) -> Result<(), DeviceError> {
+        self.is_loaded = false;
         Ok(())
     }
 
@@ -297,20 +318,15 @@ impl LEDControllerCapable for DummyLedController {
         todo!()
     }
 }
-impl DummyLedController {
-    fn new() -> Self {
-        Self {}
-    }
-}
 
 #[test]
 fn ds_build_auto() {
     let server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
-        .add_device(NoCapDevice::new())
-        .add_device(FunDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
+        .add_device(Device::new::<FunDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
     assert_eq!(server.get_buses().len(), 1);
     assert_eq!(server.get_devices().len(), 3);
@@ -328,10 +344,10 @@ fn ds_build_manual() {
     server.register_bus(Arc::new(RwLock::new(FunController::new()))).expect_err("duplicate bus check failed");
     assert_eq!(server.get_buses().len(), 1);
 
-    let id = server.register_device(Box::new(NoCapDevice::new())).expect("failed to add NoCapDevice");
+    let id = server.register_device(Device::new::<NoCapDevice>(None, None).unwrap(), true).expect("failed to add NoCapDevice");
     assert_eq!(server.get_devices().len(), 1);
 
-    server.register_device(Box::new(FunDevice::new())).expect("failed to add FunDevice");
+    server.register_device(Device::new::<FunDevice>(None, None).unwrap(), true).expect("failed to add FunDevice");
     assert_eq!(server.get_devices().len(), 2);
 
     server.remove_device(&id).expect("failed to remove NoCapDevice");
@@ -342,10 +358,10 @@ fn ds_build_manual() {
 fn ds_has_bus() {
     let server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
-        .add_device(NoCapDevice::new())
-        .add_device(FunDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
+        .add_device(Device::new::<FunDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
     assert!(server.has_bus::<FunController>());
     assert!(!server.has_bus::<StubController>());
@@ -355,10 +371,10 @@ fn ds_has_bus() {
 fn ds_has_device() {
     let server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
-        .add_device(NoCapDevice::new())
-        .add_device(FunDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
+        .add_device(Device::new::<FunDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
     let device_ids = server.get_devices().iter().map(|(k,_)| *k).collect::<Vec<&Uuid>>();
     assert_eq!(device_ids.len(), 3);
@@ -372,11 +388,11 @@ fn ds_has_device() {
 fn ds_get_device() {
     let mut server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
-        .add_device(FunDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<FunDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
-    let id = server.register_device(Box::new(NoCapDevice::new())).expect("failed to register device");
+    let id = server.register_device(Device::new::<NoCapDevice>(None, None).unwrap(), true).expect("failed to register device");
     let device = server.get_device(&id);
     assert!(device.is_some());
     let device = device.unwrap();
@@ -389,10 +405,10 @@ fn ds_get_buses() {
     let mut server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
         .add_bus(StubController::new())
-        .add_device(NoCapDevice::new())
-        .add_device(FunDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
+        .add_device(Device::new::<FunDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
     for bus in server.get_buses() {
         let bus_name = bus.name();
@@ -417,10 +433,10 @@ fn ds_get_devices() {
     let mut device_names = vec!["nocap", "fun", "sleepy"];
     let mut server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
-        .add_device(NoCapDevice::new())
-        .add_device(FunDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
+        .add_device(Device::new::<FunDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
         for (_, device) in server.get_devices() {
             let device_name = device.as_ref().name();
@@ -443,9 +459,9 @@ fn ds_get_devices() {
 #[test]
 fn device_get_capabilities() {
     let mut server = DeviceServerBuilder::configure()
-        .build().expect("failed to build server");
+        .build(true).expect("failed to build server");
 
-    let id = server.register_device(Box::new(DummyLedController::new())).expect("failed to register device");
+    let id = server.register_device(Device::new::<DummyLedController>(None, None).unwrap(), true).expect("failed to register device");
     let device = server.get_device(&id).expect("failed to get device");
     let caps = device.get_capabilities();
     assert!(caps.contains(&crate::capabilities::CapabilityId::LEDController));
@@ -456,11 +472,11 @@ fn device_get_capabilities() {
 fn device_has_capability() {
     let mut server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
-        .add_device(NoCapDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
-    let id = server.register_device(Box::new(SleepyDevice::new())).expect("failed to register device");
+    let id = server.register_device(Device::new::<SleepyDevice>(None, None).unwrap(), true).expect("failed to register device");
     let device = server.get_device(&id).expect("failed to get device");
     assert!(device.has_capability::<dyn SleepCapable>());
     assert!(!device.has_capability::<dyn FunCapable>());
@@ -470,11 +486,11 @@ fn device_has_capability() {
 fn device_as_capability() {
     let mut server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
-        .add_device(NoCapDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
-    let id = server.register_device(Box::new(SleepyDevice::new())).expect("failed to register device");
+    let id = server.register_device(Device::new::<SleepyDevice>(None, None).unwrap(), true).expect("failed to register device");
     let device = server.get_device(&id).expect("failed to get device");
     device.as_capability_ref::<dyn SleepCapable>().expect("failed to cast device");
 }
@@ -483,11 +499,11 @@ fn device_as_capability() {
 fn device_as_capability_mut() {
     let mut server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
-        .add_device(NoCapDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
-    let id = server.register_device(Box::new(SleepyDevice::new())).expect("failed to register device");
+    let id = server.register_device(Device::new::<SleepyDevice>(None, None).unwrap(), true).expect("failed to register device");
     let device = server.get_device_mut(&id).expect("failed to get device");
     let sleepy = device.as_capability_mut::<dyn SleepCapable>().expect("failed to cast device");
 
@@ -504,11 +520,11 @@ fn device_as_capability_mut() {
 fn device_bus_access() {
     let mut server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
-        .add_device(NoCapDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
-    let id = server.register_device(Box::new(FunDevice::new())).expect("failed to register device");
+    let id = server.register_device(Device::new::<FunDevice>(None, None).unwrap(), true).expect("failed to register device");
     let device = server.get_device_mut(&id).expect("failed to get device");
     let fun = device.as_capability_mut::<dyn FunCapable>().expect("failed to cast device");
 
@@ -527,9 +543,9 @@ fn device_bus_access() {
 fn ds_bus_ptr_safety_check() {
     let server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
-        .add_device(NoCapDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
     assert!(server.get_bus_ptr::<StubController>().is_none());
     assert!(server.get_bus_ptr::<FunController>().is_some());
@@ -540,9 +556,9 @@ fn ds_bus_ptr_ref_eq() {
     let server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
         .add_bus(StubController::new())
-        .add_device(NoCapDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
     let stub1 = server.get_bus_ptr::<StubController>().expect("failed to get stub ptr");
     let stub2 = server.get_bus_ptr::<StubController>().expect("failed to get stub ptr");
@@ -578,9 +594,9 @@ fn ds_bus_ptr_access() {
     let server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
         .add_bus(StubController::new())
-        .add_device(NoCapDevice::new())
-        .add_device(SleepyDevice::new())
-        .build().expect("failed to build server");
+        .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, None).unwrap())
+        .build(true).expect("failed to build server");
 
     let stub = server.get_bus_ptr::<StubController>().expect("failed to get stub ptr");
     let fun = server.get_bus_ptr::<FunController>().expect("failed to get fun ptr");

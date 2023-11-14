@@ -191,7 +191,7 @@ impl DeviceServer {
         }
     }
 
-    pub fn register_device(&mut self, mut device: Device, start_device: bool) -> Result<(), DeviceError> {
+    pub fn register_device(&mut self, mut device: Device, start_device: bool) -> Result<Uuid, DeviceError> {
         if self.devices.contains_key(&device.address) {
             return Err(DeviceError::DuplicateDevice(format!("device with address {} already registered", device.address)));
         }
@@ -203,7 +203,8 @@ impl DeviceServer {
         }
 
         self.devices.insert(device.address, device);
-        Ok(())
+        // kept for compatibility
+        Ok(device.address)
     }
 
     pub fn remove_device(&mut self, address: &Uuid) -> Result<(), DeviceError> {
