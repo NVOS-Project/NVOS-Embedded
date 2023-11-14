@@ -332,8 +332,16 @@ impl DeviceServer {
         self.devices.iter().collect()
     }
 
+    pub fn get_device_with_name(&self, name: &str) -> Option<&Device> {
+        self.devices.iter().find(|x| x.1.device_name() == name).map(|x| x.1)
+    }
+
     pub fn get_device_mut(&mut self, address: &Uuid) -> Option<&mut Device> {
         self.devices.get_mut(address)
+    }
+
+    pub fn get_device_with_name_mut(&self, name: &str) -> Option<&mut Device> {
+        self.devices.iter_mut().find(|x| x.1.device_name() == name).map(|x| x.1)
     }
 
     pub fn has_device(&self, address: &Uuid) -> bool {
