@@ -101,7 +101,7 @@ impl DeviceDriver for NoCapDevice {
         self.is_loaded
     }
 
-    fn new(config: Option<&mut crate::config::DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
+    fn new(_config: Option<&mut crate::config::DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
         Ok(NoCapDevice {
             is_loaded: false
         })
@@ -135,7 +135,7 @@ impl DeviceDriver for FunDevice {
         self.is_loaded
     }
 
-    fn new(config: Option<&mut crate::config::DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
+    fn new(_config: Option<&mut crate::config::DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
         Ok(FunDevice { 
             is_loaded: false, 
             fun_controller: None 
@@ -203,7 +203,7 @@ impl DeviceDriver for SleepyDevice {
         self.is_loaded
     }
 
-    fn new(config: Option<&mut crate::config::DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
+    fn new(_config: Option<&mut crate::config::DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
         Ok(SleepyDevice { 
             is_loaded: false, 
             is_resting: false 
@@ -264,7 +264,7 @@ impl DeviceDriver for DummyLedController {
         self.is_loaded
     }
 
-    fn new(config: Option<&mut crate::config::DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
+    fn new(_config: Option<&mut crate::config::DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
         Ok(DummyLedController { 
             is_loaded: false
         })
@@ -298,7 +298,7 @@ impl LEDControllerCapable for DummyLedController {
         todo!()
     }
 
-    fn set_mode(&mut self, mode: crate::capabilities::LEDMode) -> Result<(), DeviceError> {
+    fn set_mode(&mut self, _mode: crate::capabilities::LEDMode) -> Result<(), DeviceError> {
         todo!()
     }
 
@@ -306,7 +306,7 @@ impl LEDControllerCapable for DummyLedController {
         todo!()
     }
 
-    fn set_brightness(&mut self, brightness: f32) -> Result<(), DeviceError> {
+    fn set_brightness(&mut self, _brightness: f32) -> Result<(), DeviceError> {
         todo!()
     }
 
@@ -314,7 +314,7 @@ impl LEDControllerCapable for DummyLedController {
         todo!()
     }
 
-    fn set_power_state(&mut self, powered_on: bool) -> Result<(), DeviceError> {
+    fn set_power_state(&mut self, _powered_on: bool) -> Result<(), DeviceError> {
         todo!()
     }
 }
@@ -402,7 +402,7 @@ fn ds_get_device() {
 #[test]
 fn ds_get_buses() {
     let mut bus_names = vec!["STUB", "FUN"];
-    let mut server = DeviceServerBuilder::configure()
+    let server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
         .add_bus(StubController::new())
         .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
@@ -431,7 +431,7 @@ fn ds_get_buses() {
 #[test]
 fn ds_get_devices() {
     let mut driver_names = vec!["nocap", "fun", "sleepy"];
-    let mut server = DeviceServerBuilder::configure()
+    let server = DeviceServerBuilder::configure()
         .add_bus(FunController::new())
         .add_device(Device::new::<NoCapDevice>(None, None).unwrap())
         .add_device(Device::new::<FunDevice>(None, None).unwrap())
@@ -660,7 +660,7 @@ fn stop_device_test() {
 #[test]
 fn duplicate_address_test() {
     let address = Uuid::new_v4();
-    let mut server = DeviceServerBuilder::configure()
+    let server = DeviceServerBuilder::configure()
         .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
         .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
         .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
@@ -672,7 +672,7 @@ fn duplicate_address_test() {
 #[test]
 fn duplicate_name_test() {
     let name = "some_device".to_owned();
-    let mut server = DeviceServerBuilder::configure()
+    let server = DeviceServerBuilder::configure()
         .add_device(Device::new::<SleepyDevice>(None, Some(name.clone())).unwrap())
         .add_device(Device::new::<SleepyDevice>(None, Some(name.clone())).unwrap())
         .add_device(Device::new::<SleepyDevice>(None, Some(name.clone())).unwrap())

@@ -59,7 +59,7 @@ impl RawBusController {
         })
     }
 
-    pub fn from_config(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, config: &BusControllerConfig) -> Result<Self, GpioError> {
+    pub fn from_config(gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>, _config: &BusControllerConfig) -> Result<Self, GpioError> {
         Self::new(gpio_borrow)
     }
 
