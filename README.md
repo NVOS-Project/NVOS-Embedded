@@ -18,16 +18,16 @@ This repository contains the embedded firmware that drives the NVOS root control
    - Configuration file: ✔️
    - Configuration hot-reload: ❌
    - Dynamic bus controller loading (on startup): ✔️
-   - Dynamic device driver loading (any time): ❌
+   - Dynamic device driver loading (any time): ✔️ (supported, but hot reload capability is not exposed to clients)
 - ### Controllers
   - #### Raw GPIO pin access:
-    - raw: ✔️ (BROKEN)
+    - raw: ✔️ (Not supported on our hardware)
     - raw_sysfs: ✔️
   - #### PWM access:
-    - pwm: ✔️ (BROKEN)
+    - pwm: ✔️ (Not supported on our hardware)
     - pwm_sysfs: ✔️
   - #### I2C access:
-    - i2c: ✔️ (BROKEN)
+    - i2c: ✔️ (Not supported on our hardware)
     - i2c_sysfs: ✔️
   - #### UART access:
     - uart: ✔️
@@ -39,5 +39,5 @@ This repository contains the embedded firmware that drives the NVOS root control
   - LED: ✔️
 - ### Device drivers:
   - LED (sysfs_generic_led): ✔️
-  - GPS (gps_uart): ❌
+  - GPS (gps_uart): ✔️
   - Compass (???): ❌
