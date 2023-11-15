@@ -41,7 +41,7 @@ pub struct Device {
 
 impl Device {
     pub fn from_driver(driver: Box<dyn DeviceDriver>, address: Option<Uuid>, friendly_name: Option<String>) -> Result<Self, DeviceError> {
-        if friendly_name.is_some_and(|x| x.is_empty()) {
+        if friendly_name.as_ref().is_some_and(|x| x.is_empty()) {
             return Err(DeviceError::InvalidConfig("invalid device name".to_string()))
         }
 
@@ -59,7 +59,7 @@ impl Device {
 
     pub fn from_config<T: DeviceDriver>(config: &mut DeviceConfig, address: Option<Uuid>) -> Result<Self, DeviceError> {
         let driver: Box<dyn DeviceDriver> = Box::new(T::new(Some(config))?) as Box<dyn DeviceDriver>;
-        Self::from_driver(driver, address, config.friendly_name)
+        Self::from_driver(driver, address, config.friendly_name.clone())
     }
 
     pub fn new<T: DeviceDriver>(address: Option<Uuid>, friendly_name: Option<String>) -> Result<Self, DeviceError> {
@@ -72,7 +72,7 @@ impl Device {
     }
 
     pub fn device_name(&self) -> String {
-        self.name
+        self.name.clone()
     }
 
     pub fn driver_name(&self) -> String {
@@ -197,15 +197,14 @@ impl DeviceServer {
             return Err(DeviceError::DuplicateDevice(format!("device with address {} already registered", device.address)));
         }
 
-        
-        
+        let address = device.address();
         if start_device && !device.as_ref().is_running() {
             device.as_mut().start(self)?;    
         }
 
-        self.devices.insert(device.address, device);
+        self.devices.insert(address, device);
         // kept for compatibility
-        Ok(device.address)
+        Ok(address)
     }
 
     pub fn remove_device(&mut self, address: &Uuid) -> Result<(), DeviceError> {
@@ -213,40 +212,50 @@ impl DeviceServer {
             return Err(DeviceError::NotFound(address.to_owned()));
         }
 
-
-        let mut device = self.devices.get_mut(address).unwrap().as_mut();
+        let mut device = self.devices.remove(address).unwrap();
         if device.is_running() {
-            device.stop(self)?;
+            if let Err(e) = device.as_mut().stop(self) {
+                self.devices.insert(address.to_owned(), device);
+                return Err(e);
+            }
         }
-
-        self.devices.remove(address);
+        
         Ok(())
     }
 
     pub fn start_device(&mut self, address: &Uuid) -> Result<(), DeviceError> {
-        if !self.devices.contains_key(address) {
+        if let Some(device) = self.devices.get_mut(address) {
+            if device.is_running() {
+                return Err(DeviceError::InvalidOperation("device is already running".to_owned()));
+            }
+        } else {
             return Err(DeviceError::NotFound(address.to_owned()));
         }
-
-        let mut device = self.devices.get_mut(&address).unwrap().as_mut();
-        if device.is_running() {
-            return Err(DeviceError::InvalidOperation("device is already running".to_owned()));
-        }
-
-        device.start(self)
+    
+        let mut device = self.devices.remove(address).unwrap();
+        device.as_mut().start(self)?;
+        self.devices.insert(*address, device);
+        Ok(())
     }
 
     pub fn stop_device(&mut self, address: &Uuid) -> Result<(), DeviceError> {
-        if !self.devices.contains_key(address) {
+        if let Some(device) = self.devices.get_mut(address) {
+            if !device.is_running() {
+                return Err(DeviceError::InvalidOperation("device is not currently running".to_owned()));
+            }
+        } else {
             return Err(DeviceError::NotFound(address.to_owned()));
         }
 
-        let mut device = self.devices.get_mut(&address).unwrap().as_mut();
+        let device = self.devices.get_mut(&address).unwrap().as_mut();
         if !device.is_running() {
             return Err(DeviceError::InvalidOperation("device is not currently running".to_owned()));
         }
 
-        device.stop(self)
+        let mut device = self.devices.remove(address).unwrap();
+        device.as_mut().stop(self)?;
+        self.devices.insert(*address, device);
+        Ok(())
     }
 
     pub fn register_bus(&mut self, bus: Arc<RwLock<dyn BusController>>) -> Result<(), DeviceError> {
@@ -341,7 +350,7 @@ impl DeviceServer {
         self.devices.get_mut(address)
     }
 
-    pub fn get_device_with_name_mut(&self, name: &str) -> Option<&mut Device> {
+    pub fn get_device_with_name_mut(&mut self, name: &str) -> Option<&mut Device> {
         self.devices.iter_mut().find(|x| x.1.device_name() == name).map(|x| x.1)
     }
 

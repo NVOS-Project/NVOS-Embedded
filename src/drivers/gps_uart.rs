@@ -15,7 +15,6 @@ use std::{
     thread,
     time::Duration
 };
-use uuid::Uuid;
 
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const CYCLE_BUFFER_SIZE: usize = 256;

@@ -634,6 +634,7 @@ fn device_start_test() {
     assert_eq!(device.is_running(), false);
 
     server.start_device(&address).expect("failed to start device");
+    let device = server.get_device(&address).expect("failed to get device by id");
     assert_eq!(device.is_running(), true);
 
     server.start_device(&address).expect_err("started device twice");
@@ -650,6 +651,7 @@ fn stop_device_test() {
     assert_eq!(device.is_running(), true);
 
     server.stop_device(&address).expect("failed to stop device");
+    let device = server.get_device(&address).expect("failed to get device by id");
     assert_eq!(device.is_running(), false);
 
     server.stop_device(&address).expect_err("attempted to stop device twice");
@@ -664,16 +666,16 @@ fn duplicate_address_test() {
         .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
         .build(true);
 
-    assert!(server.is_ok(), "somehow managed to add multiple duplicates");
+    assert!(server.is_err(), "somehow managed to add multiple duplicates");
 }
 
 #[test]
 fn duplicate_name_test() {
     let name = "some_device".to_owned();
     let mut server = DeviceServerBuilder::configure()
-        .add_device(Device::new::<SleepyDevice>(None, Some(name)).unwrap())
-        .add_device(Device::new::<SleepyDevice>(None, Some(name)).unwrap())
-        .add_device(Device::new::<SleepyDevice>(None, Some(name)).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, Some(name.clone())).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, Some(name.clone())).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, Some(name.clone())).unwrap())
         .build(true);
 
     assert!(server.is_ok(), "somehow managed to add multiple duplicates");
