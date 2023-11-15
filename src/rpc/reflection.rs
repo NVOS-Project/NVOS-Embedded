@@ -36,7 +36,10 @@ impl DeviceReflection for DeviceReflectionService {
             devices.push(Device { 
                 address: address.to_string(),
                 capabilities: map_capabilities_to_rpc(device.get_capabilities())
-                    .into_iter().map(|x| x as i32).collect()
+                    .into_iter().map(|x| x as i32).collect(),
+                device_name: device.device_name(),
+                driver_name: device.driver_name(),
+                is_running: device.is_running()
             });
         }
 

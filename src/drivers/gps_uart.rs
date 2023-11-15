@@ -1,6 +1,6 @@
 use crate::{
     bus::uart::UARTBusController,
-    device::{Device, DeviceError}, config::{DeviceConfig, ConfigError}, capabilities::{GpsCapable, Capability},
+    device::{DeviceDriver, DeviceError}, config::{DeviceConfig, ConfigError}, capabilities::{GpsCapable, Capability},
 };
 use intertrait::cast_to;
 use log::{debug, warn};
@@ -15,7 +15,6 @@ use std::{
     thread,
     time::Duration
 };
-use uuid::Uuid;
 
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const CYCLE_BUFFER_SIZE: usize = 256;
@@ -152,7 +151,6 @@ impl GpsWorker {
 
 pub struct UartGps {
     config: UartGpsConfig,
-    address: Option<Uuid>,
     state: Option<Arc<Mutex<Nmea>>>,
     worker_channel: Option<Mutex<mpsc::Sender<WorkerMessage>>>,
     shutdown_callback: Option<Mutex<mpsc::Receiver<()>>>,
@@ -160,7 +158,7 @@ pub struct UartGps {
 }
 
 impl UartGps {
-    pub fn new(config: UartGpsConfig) -> Result<Self, DeviceError> {
+    pub fn from_config(config: UartGpsConfig) -> Result<Self, DeviceError> {
         if config.data_bits < 5 || config.data_bits > 9 {
             return Err(DeviceError::InvalidConfig(
                 ConfigError::InvalidEntry("data bit count is out of bounds: only 5-9 data bits are supported".to_string()).to_string()
@@ -181,7 +179,6 @@ impl UartGps {
 
         Ok(Self {
             config: config,
-            address: None,
             state: None,
             worker_channel: None,
             shutdown_callback: None,
@@ -189,14 +186,39 @@ impl UartGps {
         })
     }
 
-    pub fn from_config(config: &mut DeviceConfig) -> Result<Self, DeviceError> {
-        let data: UartGpsConfig = match serde_json::from_value(config.data.clone()) {
+    fn get_state(&self) -> Result<MutexGuard<'_, Nmea>, DeviceError> {
+        if !self.is_loaded || !self.state.is_some() {
+            return Err(DeviceError::InvalidOperation(
+                "device is in an invalid state".to_string(),
+            ));
+        }
+
+        Ok(self.state.as_ref().unwrap().lock())
+    }
+}
+
+impl DeviceDriver for UartGps {
+    fn name(&self) -> String {
+        "gps_uart".to_string()
+    }
+
+    fn is_running(&self) -> bool {
+        self.is_loaded
+    }
+
+    fn new(config: Option<&mut DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
+        if config.is_none() {
+            return Err(DeviceError::InvalidConfig("this driver requires a configuration object but none was provided".to_owned()));
+        }
+
+        let config = config.unwrap();
+        let data: UartGpsConfig = match serde_json::from_value(config.driver_data.clone()) {
             Ok(d) => d,
             Err(e) => {
-                if config.data == Value::Null {
+                if config.driver_data == Value::Null {
                     match serde_json::to_value(UartGpsConfig::default()) {
                         Ok(c) => {
-                            config.data = c;
+                            config.driver_data = c;
                             return Err(DeviceError::InvalidConfig(
                                 ConfigError::MissingEntry(
                                     "device was missing config data, default config was written"
@@ -226,29 +248,12 @@ impl UartGps {
             }
         };
 
-        Self::new(data)
+        Self::from_config(data)
     }
 
-    fn get_state(&self) -> Result<MutexGuard<'_, Nmea>, DeviceError> {
-        if !self.is_loaded || !self.state.is_some() {
-            return Err(DeviceError::InvalidOperation(
-                "device is in an invalid state".to_string(),
-            ));
-        }
-
-        Ok(self.state.as_ref().unwrap().lock())
-    }
-}
-
-impl Device for UartGps {
-    fn name(&self) -> String {
-        "gps_uart".to_string()
-    }
-
-    fn load(
+    fn start(
         &mut self,
-        parent: &mut crate::device::DeviceServer,
-        address: Uuid,
+        parent: &mut crate::device::DeviceServer
     ) -> Result<(), DeviceError> {
         if self.is_loaded {
             return Err(DeviceError::InvalidOperation(
@@ -278,7 +283,6 @@ impl Device for UartGps {
             }
         };
 
-        self.address = Some(address);
         let state = Arc::new(Mutex::new(Nmea::default()));
         self.state = Some(state.clone());
 
@@ -301,7 +305,7 @@ impl Device for UartGps {
         Ok(())
     }
 
-    fn unload(&mut self, parent: &mut crate::device::DeviceServer) -> Result<(), DeviceError> {
+    fn stop(&mut self, parent: &mut crate::device::DeviceServer) -> Result<(), DeviceError> {
         if !self.is_loaded {
             return Err(DeviceError::InvalidOperation(
                 "device unload requested but this device isn't loaded".to_string(),
@@ -337,7 +341,6 @@ impl Device for UartGps {
         }
 
         self.is_loaded = false;
-        self.address = None;
         self.state = None;
 
         Ok(())

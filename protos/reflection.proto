@@ -11,6 +11,9 @@ enum CapabilityId {
 message Device {
     string Address = 1;
     repeated CapabilityId Capabilities = 2;
+    string DeviceName = 3;
+    string DriverName = 4;
+    bool IsRunning = 5;
 }
 
 message BusController {

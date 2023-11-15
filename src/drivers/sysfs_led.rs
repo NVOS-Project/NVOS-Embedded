@@ -2,7 +2,7 @@ use crate::{
     bus::{pwm_sysfs::SysfsPWMBusController, raw_sysfs::SysfsRawBusController},
     capabilities::{Capability, LEDControllerCapable, LEDMode},
     config::{ConfigError, DeviceConfig},
-    device::{Device, DeviceError, DeviceServer},
+    device::{DeviceDriver, DeviceError, DeviceServer},
 };
 use intertrait::cast_to;
 use log::{warn, debug};
@@ -11,7 +11,6 @@ use serde_json::Value;
 use std::any::Any;
 use sysfs_gpio::Pin;
 use sysfs_pwm::Pwm;
-use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SysfsLedControllerConfig {
@@ -52,7 +51,6 @@ impl Default for SysfsLedControllerConfig {
 
 pub struct SysfsLedController {
     config: SysfsLedControllerConfig,
-    address: Option<Uuid>,
     mode_switch_pin: Option<Pin>,
     brightness_pin: Option<Pwm>,
     mode: LEDMode,
@@ -62,7 +60,7 @@ pub struct SysfsLedController {
 }
 
 impl SysfsLedController {
-    pub fn new(config: SysfsLedControllerConfig) -> Result<Self, DeviceError> {
+    pub fn from_config(config: SysfsLedControllerConfig) -> Result<Self, DeviceError> {
         let mode = config.default_mode;
         let brightness = config.default_brightness;
         let power_state = config.default_power_state_on;
@@ -100,7 +98,6 @@ impl SysfsLedController {
 
         Ok(Self {
             config: config,
-            address: None,
             mode_switch_pin: None,
             brightness_pin: None,
             mode: mode,
@@ -109,15 +106,30 @@ impl SysfsLedController {
             is_loaded: false,
         })
     }
+}
 
-    pub fn from_config(config: &mut DeviceConfig) -> Result<Self, DeviceError> {
-        let data: SysfsLedControllerConfig = match serde_json::from_value(config.data.clone()) {
+impl DeviceDriver for SysfsLedController {
+    fn name(&self) -> String {
+        "sysfs_generic_led".to_string()
+    }
+
+    fn is_running(&self) -> bool {
+        self.is_loaded
+    }
+
+    fn new(config: Option<&mut DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized {
+        if config.is_none() {
+            return Err(DeviceError::InvalidConfig("this driver requires a configuration object but none was provided".to_owned()));
+        }
+
+        let config = config.unwrap();
+        let data: SysfsLedControllerConfig = match serde_json::from_value(config.driver_data.clone()) {
             Ok(d) => d,
             Err(e) => {
-                if config.data == Value::Null {
+                if config.driver_data == Value::Null {
                     match serde_json::to_value(SysfsLedControllerConfig::default()) {
                         Ok(c) => {
-                            config.data = c;
+                            config.driver_data = c;
                             return Err(DeviceError::InvalidConfig(
                                 ConfigError::MissingEntry(
                                     "device was missing config data, default config was written"
@@ -147,16 +159,10 @@ impl SysfsLedController {
             }
         };
 
-        Self::new(data)
-    }
-}
-
-impl Device for SysfsLedController {
-    fn name(&self) -> String {
-        "sysfs_generic_led".to_string()
+        Self::from_config(data)
     }
 
-    fn load(&mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError> {
+    fn start(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError> {
         if self.is_loaded {
             return Err(DeviceError::InvalidOperation(
                 "device load requested but this device is already loaded".to_string(),
@@ -203,7 +209,6 @@ impl Device for SysfsLedController {
             warn!("Failed to enable brightness PWM channel: {}", e);
         }
 
-        self.address = Some(address);
         self.mode_switch_pin = Some(mode_switch_pin);
         self.brightness_pin = Some(brightness_pin);
 
@@ -222,7 +227,7 @@ impl Device for SysfsLedController {
         Ok(())
     }
 
-    fn unload(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError> {
+    fn stop(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError> {
         if !self.is_loaded {
             return Err(DeviceError::InvalidOperation(
                 "device unload requested but this device isn't loaded".to_string(),
@@ -274,7 +279,6 @@ impl Device for SysfsLedController {
         }
 
         self.is_loaded = false;
-        self.address = None;
         Ok(())
     }
 

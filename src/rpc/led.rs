@@ -1,8 +1,8 @@
 use self::led_controller_server::LedController;
-use crate::{capabilities::{LEDControllerCapable, LEDMode}, device::{DeviceServer, DeviceError}};
+use crate::{capabilities::{LEDControllerCapable, LEDMode}, device::DeviceServer};
 use parking_lot::{RwLock, RwLockReadGuard, MappedRwLockReadGuard, RwLockWriteGuard, MappedRwLockWriteGuard};
-use std::{str::FromStr, sync::Arc};
-use tonic::{Code, Status, Response, Request};
+use std::sync::Arc;
+use tonic::{Status, Response, Request};
 use uuid::Uuid;
 
 use super::void::Void;

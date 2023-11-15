@@ -9,7 +9,7 @@ mod rpc;
 mod tests;
 
 use config::{ConfigError, Configuration};
-use device::DeviceServer;
+use device::{Device, DeviceServer, DeviceError};
 use gpio::{GpioBorrowChecker, PinState};
 use log::{error, info, warn, LevelFilter, debug, SetLoggerError};
 use parking_lot::RwLock;
@@ -29,7 +29,6 @@ use uuid::Uuid;
 
 use crate::{
     adb::{AdbServer, PortType},
-    device::Device,
     drivers::{sysfs_led::SysfsLedController, gps_uart::UartGps},
     rpc::{
         gps::{gps_server::GpsServer, GpsService},
@@ -183,22 +182,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     for device_config in &mut config.device_section.devices {
         info!("Initializing device: (driver: {})", device_config.driver);
-        let device_instance: Result<Box<dyn Device>, String> =
-            match device_config.driver.to_lowercase().as_str() {
-                "sysfs_generic_led" => SysfsLedController::from_config(device_config)
-                    .map(|device| Box::new(device) as Box<dyn Device>)
-                    .map_err(|err| err.to_string()),
-                "gps_uart" => UartGps::from_config(device_config)
-                    .map(|device| Box::new(device) as Box<dyn Device>)
-                    .map_err(|err| err.to_string()),
-                unknown_driver => Err(format!(
-                    "Device driver {} is not implemented by this server",
-                    unknown_driver
-                )),
-            };
+        let device_instance = match device_config.driver.to_lowercase().as_str() {
+            "sysfs_generic_led" => Device::from_config::<SysfsLedController>(device_config, None),
+            "gps_uart" => Device::from_config::<UartGps>(device_config, None),
+            unknown_driver => Err(DeviceError::InvalidConfig(format!("device driver {} is not supported by this server", unknown_driver)))
+        };
 
         match device_instance {
-            Ok(d) => match device_server.register_device(d) {
+            Ok(d) => match device_server.register_device(d, true) {
                 Ok(id) => {
                     info!("Device (driver: {}) is OK", device_config.driver);
                     debug!("Device assigned address is {}", id);
@@ -245,10 +236,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Err(e) => error!("Failed to open config file for write: {}", e),
     }
 
-    info!("Starting device server");
-    // Prepare the device server for multi threading
-    let device_server = Arc::new(RwLock::new(device_server));
-
     info!("Starting ADB server connection");
     let adb_server = AdbServer::with_timeout(
         &config.adb_section.server_host,
@@ -266,6 +253,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(_) => info!("Port forwarded: {}", config.rpc_section.server_port),
         Err(err) => error!("Failed to forward port: {}", err),
     }
+
+    info!("Starting device server");
+    // Prepare the device server for multi threading
+    let device_server = Arc::new(RwLock::new(device_server));
 
     // Prepare the ADB server for multi threading
     let adb_server = Arc::new(RwLock::new(adb_server));

@@ -3,9 +3,9 @@ use nmea::{Satellite, Nmea};
 use serde::{Serialize, Deserialize};
 use strum::{EnumIter, IntoEnumIterator};
 
-use crate::device::{DeviceError, Device};
+use crate::device::{DeviceError, DeviceDriver};
 
-pub fn get_device_capabilities<T: Device + ?Sized>(device: &T) -> Vec<CapabilityId> {
+pub fn get_device_capabilities<T: DeviceDriver + ?Sized>(device: &T) -> Vec<CapabilityId> {
     let mut capabilities = Vec::<CapabilityId>::new();
     for capability in CapabilityId::iter() {
         let has_capability = match capability {

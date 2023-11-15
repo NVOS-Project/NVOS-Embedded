@@ -4,6 +4,7 @@ use log::warn;
 use uuid::Uuid;
 use crate::bus::BusController;
 use crate::capabilities::{Capability, CapabilityId, get_device_capabilities};
+use crate::config::DeviceConfig;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -11,44 +12,96 @@ use std::sync::Arc;
 use unbox_box::BoxExt;
 use parking_lot::{RwLock, RwLockReadGuard, MappedRwLockReadGuard, RwLockWriteGuard, MappedRwLockWriteGuard};
 
-pub trait Device : CastFromSync  {
+fn assert_controller_locked(controller: &Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, dyn BusController>>) -> bool {
+    if controller.is_locked_exclusive() {
+        warn!("cannot access controller because it is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
+        warn!("continuing to enumerate controllers, but this will yield the current controller invisible to the caller");
+        return true;
+    }
+    
+    return false;
+}
+
+pub trait DeviceDriver : CastFromSync  {
     fn name(&self) -> String;
-    fn load(&mut self, parent: &mut DeviceServer, address: Uuid) -> Result<(), DeviceError>;
-    fn unload(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError>;
+    fn is_running(&self) -> bool;
+    fn new(config: Option<&mut DeviceConfig>) -> Result<Self, DeviceError> where Self : Sized;
+    fn start(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError>;
+    fn stop(&mut self, parent: &mut DeviceServer) -> Result<(), DeviceError>;
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
-pub struct DeviceBox {
-    device: Box<dyn Device>,
+pub struct Device {
+    address: Uuid,
+    name: String,
+    driver: Box<dyn DeviceDriver>,
     capabilities: Vec<CapabilityId>
 }
 
-impl DeviceBox {
-    pub fn new(device: Box<dyn Device>) -> Self {
-        let cap_data = get_device_capabilities(device.unbox_ref());
-        DeviceBox { device: device, capabilities: cap_data }
+impl Device {
+    pub fn from_driver(driver: Box<dyn DeviceDriver>, address: Option<Uuid>, friendly_name: Option<String>) -> Result<Self, DeviceError> {
+        if friendly_name.as_ref().is_some_and(|x| x.is_empty()) {
+            return Err(DeviceError::InvalidConfig("invalid device name".to_string()))
+        }
+
+        let address = address.unwrap_or(Uuid::new_v4());
+        let name = friendly_name.unwrap_or(format!("{}-{}", driver.name(), address));
+        let cap_data = get_device_capabilities(driver.unbox_ref());
+
+        Ok(Device { 
+            address: address, 
+            name: name, 
+            driver: driver,
+            capabilities: cap_data
+        })
+    }
+
+    pub fn from_config<T: DeviceDriver>(config: &mut DeviceConfig, address: Option<Uuid>) -> Result<Self, DeviceError> {
+        let driver: Box<dyn DeviceDriver> = Box::new(T::new(Some(config))?) as Box<dyn DeviceDriver>;
+        Self::from_driver(driver, address, config.friendly_name.clone())
+    }
+
+    pub fn new<T: DeviceDriver>(address: Option<Uuid>, friendly_name: Option<String>) -> Result<Self, DeviceError> {
+        let driver: Box<dyn DeviceDriver> = Box::new(T::new(None)?) as Box<dyn DeviceDriver>;
+        Self::from_driver(driver, address, friendly_name)
+    }
+
+    pub fn address(&self) -> Uuid {
+        self.address
+    }
+
+    pub fn device_name(&self) -> String {
+        self.name.clone()
+    }
+
+    pub fn driver_name(&self) -> String {
+        self.driver.name()
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.driver.is_running()
     }
 
     pub fn as_any(&self) -> &dyn Any {
-        self.device.as_any()
+        self.driver.as_any()
     }
 
-    pub fn as_ref(&self) -> &dyn Device {
-        self.device.unbox_ref()
+    pub fn as_ref(&self) -> &dyn DeviceDriver {
+        self.driver.unbox_ref()
     }
 
-    pub fn as_mut(&mut self) -> &mut dyn Device {
-        self.device.unbox_mut()
+    pub fn as_mut(&mut self) -> &mut dyn DeviceDriver {
+        self.driver.unbox_mut()
     }
 
     pub fn as_capability_ref<T: Capability + 'static + ?Sized>(&self) -> Option<&T> {
-        let device = self.device.as_ref();
+        let device = self.driver.as_ref();
         device.cast::<T>()
     }
 
     pub fn as_capability_mut<T: Capability + 'static + ?Sized>(&mut self) -> Option<&mut T> {
-        let device = self.device.as_mut();
+        let device = self.driver.as_mut();
         device.cast::<T>()
     }
 
@@ -66,6 +119,7 @@ pub enum DeviceError {
     NotFound(Uuid),
     MissingController(String),
     DuplicateController,
+    DuplicateDevice(String),
     HardwareError(String),
     InvalidOperation(String),
     InvalidConfig(String),
@@ -77,7 +131,8 @@ impl Display for DeviceError {
         f.write_str(&match self {
             DeviceError::NotFound(id) => format!("device with address {} is not registered", id),
             DeviceError::MissingController(name) => format!("bus controller \"{}\" was unavailable", name),
-            DeviceError::DuplicateController => format!("controller of the same type is already registered"),
+            DeviceError::DuplicateController => format!("bus controller of the same type is already registered"),
+            DeviceError::DuplicateDevice(desc) => format!("duplicate device: {}", desc),
             DeviceError::HardwareError(desc) => format!("a hardware error has occurred: {}", desc),
             DeviceError::InvalidOperation(desc) => format!("invalid operation: {}", desc),
             DeviceError::InvalidConfig(desc) => format!("invalid config: {}", desc),
@@ -85,14 +140,15 @@ impl Display for DeviceError {
         })
     }
 }
+
 pub struct DeviceServer {
     bus_controllers: Vec<Arc<RwLock<dyn BusController>>>,
-    devices: HashMap<Uuid, DeviceBox>
+    devices: HashMap<Uuid, Device>
 }
 
 pub struct DeviceServerBuilder {
     bus_controllers: Vec<Arc<RwLock<dyn BusController>>>,
-    devices: Vec<Box<dyn Device>>
+    devices: Vec<Device>
 }
 
 impl DeviceServerBuilder {
@@ -103,8 +159,8 @@ impl DeviceServerBuilder {
         }
     }
 
-    pub fn add_device<T: Device>(mut self, device: T) -> Self {
-        self.devices.push(Box::new(device));
+    pub fn add_device(mut self, device: Device) -> Self {
+        self.devices.push(device);
         self
     }
 
@@ -113,7 +169,7 @@ impl DeviceServerBuilder {
         self
     }
 
-    pub fn build(mut self) -> Result<DeviceServer, DeviceError> {
+    pub fn build(mut self, start_devices: bool) -> Result<DeviceServer, DeviceError> {
         let mut server = DeviceServer::new();
 
         while let Some(bus) = self.bus_controllers.pop() {
@@ -121,7 +177,7 @@ impl DeviceServerBuilder {
         }
 
         while let Some(device) = self.devices.pop() {
-            server.register_device(device)?;
+            server.register_device(device, start_devices)?;
         }
 
         Ok(server)
@@ -136,26 +192,70 @@ impl DeviceServer {
         }
     }
 
-    pub fn register_device(&mut self, mut device: Box<dyn Device>) -> Result<Uuid, DeviceError> {
-        let id = Uuid::new_v4();
-        device.load(self, id)?;
-        self.devices.insert(id, DeviceBox::new(device));
-        Ok(id)
+    pub fn register_device(&mut self, mut device: Device, start_device: bool) -> Result<Uuid, DeviceError> {
+        if self.devices.contains_key(&device.address) {
+            return Err(DeviceError::DuplicateDevice(format!("device with address {} already registered", device.address)));
+        }
+
+        let address = device.address();
+        if start_device && !device.as_ref().is_running() {
+            device.as_mut().start(self)?;    
+        }
+
+        self.devices.insert(address, device);
+        // kept for compatibility
+        Ok(address)
     }
 
-    pub fn remove_device(&mut self, device_id: &Uuid) -> Result<(), DeviceError> {
-        if !self.devices.contains_key(device_id) {
-            return Err(DeviceError::NotFound(device_id.to_owned()));
+    pub fn remove_device(&mut self, address: &Uuid) -> Result<(), DeviceError> {
+        if !self.devices.contains_key(address) {
+            return Err(DeviceError::NotFound(address.to_owned()));
         }
 
-        let mut device = self.devices.remove(device_id).unwrap();
-        match device.as_mut().unload(self) {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                self.devices.insert(device_id.to_owned(), device);
-                Err(e)
+        let mut device = self.devices.remove(address).unwrap();
+        if device.is_running() {
+            if let Err(e) = device.as_mut().stop(self) {
+                self.devices.insert(address.to_owned(), device);
+                return Err(e);
             }
         }
+        
+        Ok(())
+    }
+
+    pub fn start_device(&mut self, address: &Uuid) -> Result<(), DeviceError> {
+        if let Some(device) = self.devices.get_mut(address) {
+            if device.is_running() {
+                return Err(DeviceError::InvalidOperation("device is already running".to_owned()));
+            }
+        } else {
+            return Err(DeviceError::NotFound(address.to_owned()));
+        }
+    
+        let mut device = self.devices.remove(address).unwrap();
+        device.as_mut().start(self)?;
+        self.devices.insert(*address, device);
+        Ok(())
+    }
+
+    pub fn stop_device(&mut self, address: &Uuid) -> Result<(), DeviceError> {
+        if let Some(device) = self.devices.get_mut(address) {
+            if !device.is_running() {
+                return Err(DeviceError::InvalidOperation("device is not currently running".to_owned()));
+            }
+        } else {
+            return Err(DeviceError::NotFound(address.to_owned()));
+        }
+
+        let device = self.devices.get_mut(&address).unwrap().as_mut();
+        if !device.is_running() {
+            return Err(DeviceError::InvalidOperation("device is not currently running".to_owned()));
+        }
+
+        let mut device = self.devices.remove(address).unwrap();
+        device.as_mut().stop(self)?;
+        self.devices.insert(*address, device);
+        Ok(())
     }
 
     pub fn register_bus(&mut self, bus: Arc<RwLock<dyn BusController>>) -> Result<(), DeviceError> {
@@ -173,10 +273,8 @@ impl DeviceServer {
 
     pub fn get_bus<T: BusController>(&self) -> Option<MappedRwLockReadGuard<'_, T>> {
         for controller in &self.bus_controllers {
-            if controller.is_locked_exclusive() {
-                warn!("cannot access controller because it is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
-                warn!("continuing to enumerate controllers, but this will yield the current controller invisible to the caller");
-                continue;
+            if assert_controller_locked(controller) {
+                continue;   
             }
 
             let r = controller.read();
@@ -190,10 +288,8 @@ impl DeviceServer {
 
     pub fn get_bus_mut<T: BusController>(&self) -> Option<MappedRwLockWriteGuard<'_, T>> {
         for controller in &self.bus_controllers {
-            if controller.is_locked_exclusive() {
-                warn!("cannot access controller because it is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
-                warn!("continuing to enumerate controllers, but this will yield the current controller invisible to the caller");
-                continue;
+            if assert_controller_locked(controller) {
+                continue;   
             }
 
             let r = controller.write();
@@ -207,10 +303,8 @@ impl DeviceServer {
 
     pub fn get_bus_ptr<T: BusController + 'static>(&self) -> Option<Arc<RwLock<T>>> {
         for controller in &self.bus_controllers {
-            if controller.is_locked_exclusive() {
-                warn!("cannot access controller because it is borrowed mutably, all outstanding mutable references must be dropped first to prevent a deadlock");
-                warn!("continuing to enumerate controllers, but this will yield the current controller invisible to the caller");
-                continue;
+            if assert_controller_locked(controller) {
+                continue;   
             }
 
             let _sanity_check = (*controller.read()).as_any().is::<T>();
@@ -240,31 +334,27 @@ impl DeviceServer {
         return false;
     }
 
-    pub fn get_device(&self, address: &Uuid) -> Option<&DeviceBox> {
-        for (id, device) in &self.devices {
-            if id == address {
-                return Some(device);
-            }
-        }
-
-        None
+    pub fn get_device(&self, address: &Uuid) -> Option<&Device> {
+        self.devices.get(address)
     }
 
-    pub fn get_devices(&self) -> HashMap<&Uuid, &DeviceBox> {
+    pub fn get_devices(&self) -> HashMap<&Uuid, &Device> {
         self.devices.iter().collect()
     }
 
-    pub fn get_device_mut(&mut self, address: &Uuid) -> Option<&mut DeviceBox> {
-        for (id, device) in &mut self.devices {
-            if id == address {
-                return Some(device);
-            }
-        }
+    pub fn get_device_with_name(&self, name: &str) -> Option<&Device> {
+        self.devices.iter().find(|x| x.1.device_name() == name).map(|x| x.1)
+    }
 
-        None
+    pub fn get_device_mut(&mut self, address: &Uuid) -> Option<&mut Device> {
+        self.devices.get_mut(address)
+    }
+
+    pub fn get_device_with_name_mut(&mut self, name: &str) -> Option<&mut Device> {
+        self.devices.iter_mut().find(|x| x.1.device_name() == name).map(|x| x.1)
     }
 
     pub fn has_device(&self, address: &Uuid) -> bool {
-        self.get_device(address).is_some()
+        self.devices.contains_key(address)
     }
 }

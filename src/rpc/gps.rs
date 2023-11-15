@@ -1,12 +1,10 @@
-use crate::{capabilities::{LEDControllerCapable, LEDMode, GpsCapable}, device::{DeviceServer, DeviceError}};
+use crate::{capabilities::GpsCapable, device::DeviceServer};
 use parking_lot::{RwLock, RwLockReadGuard, MappedRwLockReadGuard, RwLockWriteGuard, MappedRwLockWriteGuard};
-use std::{str::FromStr, sync::Arc};
-use tonic::{Code, Status, Response, Request};
+use std::sync::Arc;
+use tonic::{Status, Response, Request};
 use uuid::Uuid;
 
 use self::gps_server::Gps;
-
-use super::void::Void;
 
 tonic::include_proto!("gps");
 
