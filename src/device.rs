@@ -197,6 +197,10 @@ impl DeviceServer {
             return Err(DeviceError::DuplicateDevice(format!("device with address {} already registered", device.address)));
         }
 
+        if self.devices.iter().any(|x| x.1.device_name() == device.device_name()) {
+            return Err(DeviceError::DuplicateDevice(format!("device with name {} already registered", device.device_name())));
+        }
+
         let address = device.address();
         if start_device && !device.as_ref().is_running() {
             device.as_mut().start(self)?;    

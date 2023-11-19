@@ -613,7 +613,7 @@ fn ds_bus_ptr_access() {
 }
 
 #[test]
-fn start_devices_test() {
+fn ds_start_devices() {
     let address = Uuid::new_v4();
     let server = DeviceServerBuilder::configure()
         .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
@@ -624,7 +624,7 @@ fn start_devices_test() {
 }
 
 #[test]
-fn device_start_test() {
+fn ds_device_start() {
     let address = Uuid::new_v4();
     let mut server = DeviceServerBuilder::configure()
         .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
@@ -641,7 +641,7 @@ fn device_start_test() {
 }
 
 #[test]
-fn stop_device_test() {
+fn ds_stop_device() {
     let address = Uuid::new_v4();
     let mut server = DeviceServerBuilder::configure()
         .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
@@ -658,7 +658,7 @@ fn stop_device_test() {
 }
 
 #[test]
-fn duplicate_address_test() {
+fn ds_duplicate_address_check() {
     let address = Uuid::new_v4();
     let server = DeviceServerBuilder::configure()
         .add_device(Device::new::<SleepyDevice>(Some(address), None).unwrap())
@@ -670,7 +670,7 @@ fn duplicate_address_test() {
 }
 
 #[test]
-fn duplicate_name_test() {
+fn ds_duplicate_name_check() {
     let name = "some_device".to_owned();
     let server = DeviceServerBuilder::configure()
         .add_device(Device::new::<SleepyDevice>(None, Some(name.clone())).unwrap())
@@ -678,5 +678,19 @@ fn duplicate_name_test() {
         .add_device(Device::new::<SleepyDevice>(None, Some(name.clone())).unwrap())
         .build(true);
 
-    assert!(server.is_ok(), "somehow managed to add multiple duplicates");
+    assert!(server.is_err(), "somehow managed to add multiple duplicates");
+}
+
+#[test]
+fn ds_get_device_by_name() {
+    let server = DeviceServerBuilder::configure()
+        .add_device(Device::new::<SleepyDevice>(None, Some("device1".to_owned())).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, Some("device2".to_owned())).unwrap())
+        .add_device(Device::new::<SleepyDevice>(None, Some("device7".to_owned())).unwrap())
+        .build(true).expect("failed to build device server");
+
+    assert!(server.get_device_with_name("device1").is_some(), "failed to find valid device");
+    assert!(server.get_device_with_name("device2").is_some(), "failed to find valid device");
+    assert!(server.get_device_with_name("device3").is_none(), "found non-existent device");
+    assert!(server.get_device_with_name("device7").is_some(), "failed to find valid device");
 }
