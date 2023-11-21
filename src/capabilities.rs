@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use intertrait::cast::CastRef;
 use nmea::{Satellite, Nmea};
 use serde::{Serialize, Deserialize};
@@ -26,7 +28,8 @@ pub trait Capability {}
 #[derive(Debug, EnumIter, Clone, Copy, PartialEq)]
 pub enum CapabilityId {
     LEDController,
-    GPS
+    GPS,
+    LightSensor
 }
 
 // Any capability APIs will go here
@@ -55,4 +58,18 @@ pub trait GpsCapable : Capability {
     fn get_nmea(&self) -> Result<Nmea, DeviceError>;
     fn get_vertical_accuracy(&self) -> Result<f32, DeviceError>;
     fn get_horizontal_accuracy(&self) -> Result<f32, DeviceError>;
+}
+
+pub trait LightSensorCapable : Capability {
+    fn get_supported_gains(&self) -> Vec<f32>;
+    fn get_supported_intervals(&self) -> Vec<u16>;
+    fn get_supported_channels(&self) -> HashMap<u8, String>;
+    fn get_auto_gain_enabled(&self) -> Result<bool, DeviceError>;
+    fn set_auto_gain_enabled(&mut self, enabled: bool) -> Result<(), DeviceError>;
+    fn get_gain(&self) -> Result<f32, DeviceError>;
+    fn set_gain(&mut self, gain: f32) -> Result<(), DeviceError>;
+    fn get_interval(&self) -> Result<u16, DeviceError>;
+    fn set_interval(&mut self, interval: u16) -> Result<(), DeviceError>;
+    fn get_luminosity(&mut self, channel: u8) -> Result<u32, DeviceError>;
+    fn calculate_lux(&mut self) -> Result<f32, DeviceError>;
 }
