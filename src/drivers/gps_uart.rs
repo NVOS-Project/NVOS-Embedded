@@ -158,7 +158,7 @@ pub struct UartGps {
 }
 
 impl UartGps {
-    pub fn from_config(config: UartGpsConfig) -> Result<Self, DeviceError> {
+    fn from_config(config: UartGpsConfig) -> Result<Self, DeviceError> {
         if config.data_bits < 5 || config.data_bits > 9 {
             return Err(DeviceError::InvalidConfig(
                 ConfigError::InvalidEntry("data bit count is out of bounds: only 5-9 data bits are supported".to_string()).to_string()

@@ -60,7 +60,7 @@ pub struct SysfsLedController {
 }
 
 impl SysfsLedController {
-    pub fn from_config(config: SysfsLedControllerConfig) -> Result<Self, DeviceError> {
+    fn from_config(config: SysfsLedControllerConfig) -> Result<Self, DeviceError> {
         let mode = config.default_mode;
         let brightness = config.default_brightness;
         let power_state = config.default_power_state_on;
