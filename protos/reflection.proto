@@ -6,6 +6,7 @@ import "void.proto";
 enum CapabilityId {
     LEDController = 0;
     GPS = 1;
+    LightSensor = 2;
 }
 
 message Device {

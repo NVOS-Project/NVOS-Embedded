@@ -21,6 +21,7 @@ fn map_capability_to_rpc(cap: crate::capabilities::CapabilityId) -> self::Capabi
     match cap {
         crate::capabilities::CapabilityId::LEDController => CapabilityId::LedController,
         crate::capabilities::CapabilityId::GPS => CapabilityId::Gps,
+        crate::capabilities::CapabilityId::LightSensor => CapabilityId::LightSensor
     }
 }
 

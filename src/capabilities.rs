@@ -12,7 +12,8 @@ pub fn get_device_capabilities<T: DeviceDriver + ?Sized>(device: &T) -> Vec<Capa
     for capability in CapabilityId::iter() {
         let has_capability = match capability {
             CapabilityId::LEDController => device.cast::<dyn LEDControllerCapable>().is_some(),
-            CapabilityId::GPS => device.cast::<dyn GpsCapable>().is_some()
+            CapabilityId::GPS => device.cast::<dyn GpsCapable>().is_some(),
+            CapabilityId::LightSensor => device.cast::<dyn LightSensorCapable>().is_some()
         };
 
         if has_capability {
@@ -61,15 +62,15 @@ pub trait GpsCapable : Capability {
 }
 
 pub trait LightSensorCapable : Capability {
-    fn get_supported_gains(&self) -> Vec<f32>;
-    fn get_supported_intervals(&self) -> Vec<u16>;
+    fn get_supported_gains(&self) -> HashMap<u8, f32>;
+    fn get_supported_intervals(&self) -> HashMap<u8, u16>;
     fn get_supported_channels(&self) -> HashMap<u8, String>;
     fn get_auto_gain_enabled(&self) -> Result<bool, DeviceError>;
     fn set_auto_gain_enabled(&mut self, enabled: bool) -> Result<(), DeviceError>;
     fn get_gain(&self) -> Result<f32, DeviceError>;
-    fn set_gain(&mut self, gain: f32) -> Result<(), DeviceError>;
+    fn set_gain(&mut self, gain_id: u8) -> Result<(), DeviceError>;
     fn get_interval(&self) -> Result<u16, DeviceError>;
-    fn set_interval(&mut self, interval: u16) -> Result<(), DeviceError>;
-    fn get_luminosity(&mut self, channel: u8) -> Result<u32, DeviceError>;
+    fn set_interval(&mut self, interval_id: u8) -> Result<(), DeviceError>;
+    fn get_luminosity(&mut self, channel_id: u8) -> Result<u32, DeviceError>;
     fn calculate_lux(&mut self) -> Result<f32, DeviceError>;
 }
