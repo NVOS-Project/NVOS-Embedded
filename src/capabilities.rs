@@ -62,7 +62,7 @@ pub trait GpsCapable : Capability {
 }
 
 pub trait LightSensorCapable : Capability {
-    fn get_supported_gains(&self) -> HashMap<u8, f32>;
+    fn get_supported_gains(&self) -> HashMap<u8, u16>;
     fn get_supported_intervals(&self) -> HashMap<u8, u16>;
     fn get_supported_channels(&self) -> HashMap<u8, String>;
     fn get_auto_gain_enabled(&self) -> Result<bool, DeviceError>;
