@@ -31,7 +31,7 @@ use uuid::Uuid;
 
 use crate::{
     adb::{AdbServer, PortType},
-    drivers::{sysfs_led::SysfsLedController, gps_uart::UartGps},
+    drivers::{sysfs_led::SysfsLedController, gps_uart::UartGps, tsl2591_sysfs::Tsl2591SysfsDriver},
     rpc::{
         gps::{gps_server::GpsServer, GpsService},
         heartbeat::{heartbeat_server::HeartbeatServer, HeartbeatService},
@@ -187,6 +187,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let device_instance = match device_config.driver.to_lowercase().as_str() {
             "sysfs_generic_led" => Device::from_config::<SysfsLedController>(device_config, None),
             "gps_uart" => Device::from_config::<UartGps>(device_config, None),
+            "tsl2591_sysfs" => Device::from_config::<Tsl2591SysfsDriver>(device_config, None),
             unknown_driver => Err(DeviceError::InvalidConfig(format!("device driver {} is not supported by this server", unknown_driver)))
         };
 

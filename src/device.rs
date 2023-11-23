@@ -116,13 +116,15 @@ impl Device {
 
 #[derive(Debug, PartialEq)]
 pub enum DeviceError {
-    NotFound(Uuid),
+    NotFound(Uuid), 
     MissingController(String),
     DuplicateController,
     DuplicateDevice(String),
     HardwareError(String),
     InvalidOperation(String),
     InvalidConfig(String),
+    NotSupported,
+    Internal,
     Other(String)
 }
 
@@ -136,6 +138,8 @@ impl Display for DeviceError {
             DeviceError::HardwareError(desc) => format!("a hardware error has occurred: {}", desc),
             DeviceError::InvalidOperation(desc) => format!("invalid operation: {}", desc),
             DeviceError::InvalidConfig(desc) => format!("invalid config: {}", desc),
+            DeviceError::NotSupported => format!("operation is not supported"),
+            DeviceError::Internal => format!("internal error"),
             DeviceError::Other(desc) => format!("an unknown error has occurred: {}", desc)
         })
     }
