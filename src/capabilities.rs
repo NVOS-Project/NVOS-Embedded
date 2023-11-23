@@ -67,7 +67,7 @@ pub trait LightSensorCapable : Capability {
     fn get_supported_channels(&self) -> HashMap<u8, String>;
     fn get_auto_gain_enabled(&self) -> Result<bool, DeviceError>;
     fn set_auto_gain_enabled(&mut self, enabled: bool) -> Result<(), DeviceError>;
-    fn get_gain(&self) -> Result<f32, DeviceError>;
+    fn get_gain(&self) -> Result<u16, DeviceError>;
     fn set_gain(&mut self, gain_id: u8) -> Result<(), DeviceError>;
     fn get_interval(&self) -> Result<u16, DeviceError>;
     fn set_interval(&mut self, interval_id: u8) -> Result<(), DeviceError>;
