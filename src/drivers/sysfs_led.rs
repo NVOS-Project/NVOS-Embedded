@@ -106,6 +106,16 @@ impl SysfsLedController {
             is_loaded: false,
         })
     }
+
+    fn assert_state(&self, check_mode_pin: bool, check_bright_pin: bool) -> Result<(), DeviceError> {
+        if self.is_loaded && (!check_mode_pin || self.mode_switch_pin.is_some()) && (!check_bright_pin || self.brightness_pin.is_some()) {
+            Ok(())
+        } else {
+            Err(DeviceError::InvalidOperation(
+                "device is in an invalid state".to_string(),
+            ))
+        }
+    }
 }
 
 impl DeviceDriver for SysfsLedController {
@@ -151,7 +161,7 @@ impl DeviceDriver for SysfsLedController {
 
                 return Err(DeviceError::InvalidConfig(
                     ConfigError::SerializeError(format!(
-                        "failed to deseiralize device config data: {}",
+                        "failed to deserialize device config data: {}",
                         e
                     ))
                     .to_string(),
@@ -296,21 +306,12 @@ impl Capability for SysfsLedController {}
 #[cast_to]
 impl LEDControllerCapable for SysfsLedController {
     fn get_mode(&self) -> Result<LEDMode, DeviceError> {
-        if !self.is_loaded {
-            return Err(DeviceError::InvalidOperation(
-                "device is in an invalid state".to_string(),
-            ));
-        }
-
+        self.assert_state(false, false)?;
         Ok(self.mode.clone())
     }
 
     fn set_mode(&mut self, mode: LEDMode) -> Result<(), DeviceError> {
-        if !self.is_loaded || !self.mode_switch_pin.is_some() {
-            return Err(DeviceError::InvalidOperation(
-                "device is in an invalid state".to_string(),
-            ));
-        }
+        self.assert_state(true, false)?;
 
         let gpio_value = match mode {
             LEDMode::Visible => self.config.vis_mode_gpio_state,
@@ -338,21 +339,12 @@ impl LEDControllerCapable for SysfsLedController {
     }
 
     fn get_brightness(&self) -> Result<f32, DeviceError> {
-        if !self.is_loaded {
-            return Err(DeviceError::InvalidOperation(
-                "device is in an invalid state".to_string(),
-            ));
-        }
-
+        self.assert_state(false, false)?;
         Ok(self.brightness.clone())
     }
 
     fn set_brightness(&mut self, mut brightness: f32) -> Result<(), DeviceError> {
-        if !self.is_loaded || !self.brightness_pin.is_some() {
-            return Err(DeviceError::InvalidOperation(
-                "device is in an invalid state".to_string(),
-            ));
-        }
+        self.assert_state(false, true)?;
 
         brightness = brightness.clamp(0.0, 1.0);
         let pwm = self.brightness_pin.as_ref().unwrap();
@@ -395,11 +387,7 @@ impl LEDControllerCapable for SysfsLedController {
     }
 
     fn set_power_state(&mut self, powered_on: bool) -> Result<(), DeviceError> {
-        if !self.is_loaded || !self.brightness_pin.is_some() {
-            return Err(DeviceError::InvalidOperation(
-                "device is in an invalid state".to_string(),
-            ));
-        }
+        self.assert_state(false, true)?;
 
         let pwm = self.brightness_pin.as_ref().unwrap();
         if let Err(e) = pwm.set_period_ns(self.config.pwm_period) {
