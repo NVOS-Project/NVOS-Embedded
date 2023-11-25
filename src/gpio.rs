@@ -129,7 +129,7 @@ impl GpioBorrowChecker {
         }
 
         for pin in pins.iter() {
-            let mut pin_state = self.pins.get_mut(&pin).unwrap();
+            let pin_state = self.pins.get_mut(&pin).unwrap();
             pin_state.leased = true;
         }
 
@@ -145,7 +145,7 @@ impl GpioBorrowChecker {
 
         let lease = self.leases.get(borrow_id).unwrap();
         for pin in lease {
-            let mut pin_state = self.pins.get_mut(&pin).unwrap();
+            let pin_state = self.pins.get_mut(&pin).unwrap();
             pin_state.leased = false;
         }
 
