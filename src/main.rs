@@ -36,7 +36,7 @@ use crate::{
         gps::{gps_server::GpsServer, GpsService},
         heartbeat::{heartbeat_server::HeartbeatServer, HeartbeatService},
         led::{led_controller_server::LedControllerServer, LEDControllerService},
-        network::{network_manager_server::NetworkManagerServer, NetworkManagerService},
+        network::{network_manager_server::NetworkManagerServer, NetworkManagerService}, light_sensor::{light_sensor_server::LightSensorServer, LightSensorService},
     },
 };
 use bus::i2c::I2CBusController;
@@ -316,6 +316,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )))
         .add_service(tonic_web::enable(LedControllerServer::new(
             LEDControllerService::new(&device_server),
+        )))
+        .add_service(tonic_web::enable(LightSensorServer::new(
+            LightSensorService::new(&device_server),
         )))
         .add_service(tonic_web::enable(GpsServer::new(GpsService::new(
             &device_server,

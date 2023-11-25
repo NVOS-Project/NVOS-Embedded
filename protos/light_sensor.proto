@@ -1,0 +1,89 @@
+syntax = "proto3";
+package light_sensor;
+
+import "void.proto";
+
+message GainValue {
+    uint32 Id = 1;
+    uint32 Multiplier = 2;
+}
+
+message IntegrationTime {
+    uint32 Id = 1;
+    uint32 TimeMs = 2;
+}
+
+message Channel {
+    uint32 Id = 1;
+    string Name = 2;
+}
+
+message LightSensorRequest {
+    string Address = 1;
+}
+
+message SetAutoGainEnabledRequest {
+    string Address = 1;
+    bool Enabled = 2;
+}
+
+message SetGainRequest {
+    string Address = 1;
+    uint32 GainId = 2;
+}
+
+message SetIntervalRequest {
+    string Address = 1;
+    uint32 IntervalId = 2;
+}
+
+message GetLuminosityRequest {
+    string Address = 1;
+    uint32 ChannelId = 2;
+}
+
+message GetSupportedGainsResponse {
+    repeated GainValue Values = 1;
+}
+
+message GetSupportedIntervalsResponse {
+    repeated IntegrationTime Values = 1;
+}
+
+message GetSupportedChannelsResponse {
+    repeated Channel Values = 1;
+}
+
+message GetAutoGainEnabledResponse {
+    bool Enabled = 1;
+}
+
+message GetGainResponse {
+    uint32 GainMultiplier = 1;
+}
+
+message GetIntervalResponse {
+    uint32 IntegrationTimeMs = 1;
+}
+
+message GetLuminosityResponse {
+    uint32 Value = 1;
+}
+
+message GetIlluminanceResponse {
+    float Value = 1;
+}
+
+service LightSensor {
+    rpc GetSupportedGains (LightSensorRequest) returns (GetSupportedGainsResponse);
+    rpc GetSupportedIntervals (LightSensorRequest) returns (GetSupportedIntervalsResponse);
+    rpc GetSupportedChannels (LightSensorRequest) returns (GetSupportedChannelsResponse);
+    rpc GetAutoGainEnabled (LightSensorRequest) returns (GetAutoGainEnabledResponse);
+    rpc SetAutoGainEnabled (SetAutoGainEnabledRequest) returns (void.Void);
+    rpc GetGain (LightSensorRequest) returns (GetGainResponse);
+    rpc SetGain (SetGainRequest) returns (void.Void);
+    rpc GetInterval (LightSensorRequest) returns (GetIntervalResponse);
+    rpc SetInterval (SetIntervalRequest) returns (void.Void);
+    rpc GetLuminosity (GetLuminosityRequest) returns (GetLuminosityResponse);
+    rpc GetIlluminance (LightSensorRequest) returns (GetIlluminanceResponse);
+}

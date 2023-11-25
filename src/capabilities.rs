@@ -72,5 +72,5 @@ pub trait LightSensorCapable : Capability {
     fn get_interval(&self) -> Result<u16, DeviceError>;
     fn set_interval(&mut self, interval_id: u8) -> Result<(), DeviceError>;
     fn get_luminosity(&mut self, channel_id: u8) -> Result<u32, DeviceError>;
-    fn calculate_lux(&mut self) -> Result<f32, DeviceError>;
+    fn get_illuminance(&mut self) -> Result<f32, DeviceError>;
 }

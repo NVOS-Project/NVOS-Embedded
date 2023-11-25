@@ -633,7 +633,7 @@ impl LightSensorCapable for Tsl2591SysfsDriver {
         }
     }
 
-    fn calculate_lux(&mut self) -> Result<f32, DeviceError> {
+    fn get_illuminance(&mut self) -> Result<f32, DeviceError> {
         let mut transaction = self.bus.as_ref().unwrap().lock();
         let (mut c0, c1) = read_adc_data(&mut transaction, self.config.device_address, true, true)
             .map_err(|e| {
