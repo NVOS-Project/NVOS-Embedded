@@ -1,6 +1,6 @@
 use i2c_linux::I2c;
 use intertrait::cast_to;
-use log::{error, warn, debug};
+use log::{debug, error, warn};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -334,51 +334,80 @@ impl Tsl2591SysfsDriver {
         Ok((c0, c1))
     }
 
-    // Works the same way as the esphome tsl2591 compensation algorithm does. 
+    // Works the same way as the esphome tsl2591 compensation algorithm does.
     // Tries to keep the sensor saturation within the (1/3; 2/3) range.
     fn auto_gain_update(&mut self, c0: u16) {
-        let divider = if self.integration_time == IntegrationTime::_100MS { 2 } else { 1 };
+        let divider = if self.integration_time == IntegrationTime::_100MS {
+            2
+        } else {
+            1
+        };
         let current_gain = self.gain;
         let mut new_gain = current_gain;
 
         match current_gain {
             GainValue::_1X => {
-                if c0 < (u16::MAX / 3) / GainValue::_428X.into_multiplier() { // Very low, go up to high
+                if c0 < (u16::MAX / 3) / GainValue::_428X.into_multiplier() {
+                    // Very low, go up to high
                     new_gain = GainValue::_428X;
-                } else if c0 < (u16::MAX / 3) / GainValue::_25X.into_multiplier() { // Kinda low, go up to med
+                } else if c0 < (u16::MAX / 3) / GainValue::_25X.into_multiplier() {
+                    // Kinda low, go up to med
                     new_gain = GainValue::_25X;
                 }
-            },
+            }
             GainValue::_25X => {
-                if c0 < (u16::MAX / 3) / (GainValue::_9876X.into_multiplier()/GainValue::_25X.into_multiplier()) { // Very low, go up to max
+                if c0
+                    < (u16::MAX / 3)
+                        / (GainValue::_9876X.into_multiplier() / GainValue::_25X.into_multiplier())
+                {
+                    // Very low, go up to max
                     new_gain = GainValue::_9876X;
-                } else if c0 < (u16::MAX / 3) / (GainValue::_428X.into_multiplier() / GainValue::_25X.into_multiplier()) { // Kinda low, go up to high
+                } else if c0
+                    < (u16::MAX / 3)
+                        / (GainValue::_428X.into_multiplier() / GainValue::_25X.into_multiplier())
+                {
+                    // Kinda low, go up to high
                     new_gain = GainValue::_428X;
-                } else if c0 < ((u16::MAX as f32) * 0.945) as u16 / divider { // Too high, go down to low
+                } else if c0 > ((u16::MAX as f32) * 0.945) as u16 / divider {
+                    // Too high, go down to low
                     new_gain = GainValue::_1X;
                 }
-            },
+            }
             GainValue::_428X => {
-                if c0 < (u16::MAX / 3) / (GainValue::_9876X.into_multiplier()/GainValue::_428X.into_multiplier()) { // Kinda low, go up to max
+                if c0
+                    < (u16::MAX / 3)
+                        / (GainValue::_9876X.into_multiplier() / GainValue::_428X.into_multiplier())
+                {
+                    // Kinda low, go up to max
                     new_gain = GainValue::_9876X;
-                } else if c0 < ((u16::MAX as f32) * 0.945) as u16 / divider { // Too high, go down to mid
+                } else if c0 > ((u16::MAX as f32) * 0.945) as u16 / divider {
+                    // Too high, go down to mid
                     new_gain = GainValue::_25X;
                 }
-            },
+            }
             GainValue::_9876X => {
-                if c0 < ((u16::MAX as f32) * 0.945) as u16 / divider { // Too high, go down to high
+                if c0 > ((u16::MAX as f32) * 0.945) as u16 / divider {
+                    // Too high, go down to high
                     new_gain = GainValue::_428X;
                 }
             }
         };
 
         if current_gain != new_gain {
-            debug!("Auto gain updating from {:?} to {:?}", current_gain, new_gain);
+            debug!(
+                "Auto gain updating from {:?} to {:?}",
+                current_gain, new_gain
+            );
             let mut transaction = self.bus.as_ref().unwrap().lock();
-            match set_timing_and_gain(&mut transaction, self.integration_time, new_gain, self.config.device_address) {
+            match set_timing_and_gain(
+                &mut transaction,
+                self.integration_time,
+                new_gain,
+                self.config.device_address,
+            ) {
                 Ok(_) => {
                     self.gain = new_gain;
-                },
+                }
                 Err(e) => {
                     warn!("Failed to auto update gain: {}", e);
                 }
@@ -691,7 +720,11 @@ impl LightSensorCapable for Tsl2591SysfsDriver {
         let gain_value = self.gain.into_multiplier() as f32;
 
         let (mut c0, c1) = self.read_adc_data()?;
-        let overflow_value = if self.integration_time == IntegrationTime::_100MS { 36863 } else { 65535 };
+        let overflow_value = if self.integration_time == IntegrationTime::_100MS {
+            36863
+        } else {
+            65535
+        };
 
         if c0 == overflow_value || c1 == overflow_value {
             return Err(DeviceError::Other("sensor reading overflow".to_string()));
