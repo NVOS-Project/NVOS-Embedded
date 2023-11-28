@@ -1,6 +1,6 @@
 use i2c_linux::I2c;
 use intertrait::cast_to;
-use log::{error, warn};
+use log::{error, warn, debug};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -38,7 +38,7 @@ const ENABLE_AEN: u8 = 0x02;
 
 const SUPPORTED_CHANNELS: [&str; 3] = ["Visible+Infrared", "Infrared", "Visible"];
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum IntegrationTime {
     _100MS = 0x00,
     _200MS = 0x01,
@@ -73,7 +73,7 @@ impl IntegrationTime {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum GainValue {
     _1X = 0x00,
     _25X = 0x10,
@@ -138,6 +138,7 @@ const SUPPORTED_GAIN_VALUES: [u16; 4] = [
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Tsl2591SysfsConfig {
+    pub auto_gain_enabled: bool,
     pub default_gain: u16,
     pub default_integration_time: u16,
     pub device_address: u8,
@@ -147,6 +148,7 @@ pub struct Tsl2591SysfsConfig {
 impl Default for Tsl2591SysfsConfig {
     fn default() -> Self {
         Tsl2591SysfsConfig {
+            auto_gain_enabled: true,
             default_gain: 1,
             default_integration_time: 100,
             device_address: DEFAULT_I2C_ADDR,
@@ -237,41 +239,8 @@ fn get_chip_id<T: Write + Read + AsRawFd>(bus: &mut I2c<T>, address: u8) -> Resu
     Ok(buf[0])
 }
 
-fn read_adc_data<T: Write + Read + AsRawFd>(
-    bus: &mut I2c<T>,
-    address: u8,
-    read_c0: bool,
-    read_c1: bool,
-) -> Result<(u16, u16), Error> {
-    let mut c0_buf = [0u8; 2];
-    let mut c1_buf = [0u8; 2];
-    let mut c0 = 0;
-    let mut c1 = 0;
-
-    if read_c0 {
-        write_read(
-            bus,
-            address,
-            &[COMMAND_BIT | REGISTER_CHAN0_LSB],
-            &mut c0_buf,
-        )?;
-        c0 = (c0_buf[1] as u16) << 8 | c0_buf[0] as u16;
-    }
-
-    if read_c1 {
-        write_read(
-            bus,
-            address,
-            &[COMMAND_BIT | REGISTER_CHAN1_LSB],
-            &mut c1_buf,
-        )?;
-        c1 = (c1_buf[1] as u16) << 8 | c1_buf[0] as u16;
-    }
-
-    Ok((c0, c1))
-}
-
 pub struct Tsl2591SysfsDriver {
+    auto_gain_enabled: bool,
     config: Tsl2591SysfsConfig,
     bus: Option<I2cBus>,
     gain: GainValue,
@@ -312,11 +281,12 @@ impl Tsl2591SysfsDriver {
         };
 
         Ok(Self {
+            auto_gain_enabled: config.auto_gain_enabled,
             config: config,
             bus: None,
             gain: gain,
             integration_time: integration_time,
-            is_loaded: false
+            is_loaded: false,
         })
     }
 
@@ -327,6 +297,92 @@ impl Tsl2591SysfsDriver {
             Err(DeviceError::InvalidOperation(
                 "device is in an invalid state".to_string(),
             ))
+        }
+    }
+
+    fn read_adc_data(&mut self) -> Result<(u16, u16), DeviceError> {
+        self.assert_state(true)?;
+        let mut c0_buf = [0u8; 2];
+        let mut c1_buf = [0u8; 2];
+
+        let mut transaction = self.bus.as_ref().unwrap().lock();
+        write_read(
+            &mut transaction,
+            self.config.device_address,
+            &[COMMAND_BIT | REGISTER_CHAN0_LSB],
+            &mut c0_buf,
+        )
+        .map_err(|e| DeviceError::HardwareError(format!("failed to read data channel: {}", e)))?;
+
+        let c0 = (c0_buf[1] as u16) << 8 | c0_buf[0] as u16;
+
+        write_read(
+            &mut transaction,
+            self.config.device_address,
+            &[COMMAND_BIT | REGISTER_CHAN1_LSB],
+            &mut c1_buf,
+        )
+        .map_err(|e| DeviceError::HardwareError(format!("failed to read data channel: {}", e)))?;
+
+        let c1 = (c1_buf[1] as u16) << 8 | c1_buf[0] as u16;
+
+        if self.auto_gain_enabled {
+            drop(transaction);
+            self.auto_gain_update(c0);
+        }
+
+        Ok((c0, c1))
+    }
+
+    // Works the same way as the esphome tsl2591 compensation algorithm does. 
+    // Tries to keep the sensor saturation within the (1/3; 2/3) range.
+    fn auto_gain_update(&mut self, c0: u16) {
+        let divider = if self.integration_time == IntegrationTime::_100MS { 2 } else { 1 };
+        let current_gain = self.gain;
+        let mut new_gain = current_gain;
+
+        match current_gain {
+            GainValue::_1X => {
+                if c0 < (u16::MAX / 3) / GainValue::_428X.into_multiplier() { // Very low, go up to high
+                    new_gain = GainValue::_428X;
+                } else if c0 < (u16::MAX / 3) / GainValue::_25X.into_multiplier() { // Kinda low, go up to med
+                    new_gain = GainValue::_25X;
+                }
+            },
+            GainValue::_25X => {
+                if c0 < (u16::MAX / 3) / (GainValue::_9876X.into_multiplier()/GainValue::_25X.into_multiplier()) { // Very low, go up to max
+                    new_gain = GainValue::_9876X;
+                } else if c0 < (u16::MAX / 3) / (GainValue::_428X.into_multiplier() / GainValue::_25X.into_multiplier()) { // Kinda low, go up to high
+                    new_gain = GainValue::_428X;
+                } else if c0 < ((u16::MAX as f32) * 0.945) as u16 / divider { // Too high, go down to low
+                    new_gain = GainValue::_1X;
+                }
+            },
+            GainValue::_428X => {
+                if c0 < (u16::MAX / 3) / (GainValue::_9876X.into_multiplier()/GainValue::_428X.into_multiplier()) { // Kinda low, go up to max
+                    new_gain = GainValue::_9876X;
+                } else if c0 < ((u16::MAX as f32) * 0.945) as u16 / divider { // Too high, go down to mid
+                    new_gain = GainValue::_25X;
+                }
+            },
+            GainValue::_9876X => {
+                if c0 < ((u16::MAX as f32) * 0.945) as u16 / divider { // Too high, go down to high
+                    new_gain = GainValue::_428X;
+                }
+            }
+        };
+
+        if current_gain != new_gain {
+            debug!("Auto gain updating from {:?} to {:?}", current_gain, new_gain);
+            let mut transaction = self.bus.as_ref().unwrap().lock();
+            match set_timing_and_gain(&mut transaction, self.integration_time, new_gain, self.config.device_address) {
+                Ok(_) => {
+                    self.gain = new_gain;
+                },
+                Err(e) => {
+                    warn!("Failed to auto update gain: {}", e);
+                }
+            }
         }
     }
 }
@@ -511,11 +567,14 @@ impl LightSensorCapable for Tsl2591SysfsDriver {
     }
 
     fn get_auto_gain_enabled(&self) -> Result<bool, DeviceError> {
-        Err(DeviceError::NotSupported)
+        self.assert_state(false)?;
+        Ok(self.auto_gain_enabled)
     }
 
     fn set_auto_gain_enabled(&mut self, _enabled: bool) -> Result<(), DeviceError> {
-        Err(DeviceError::NotSupported)
+        self.assert_state(false)?;
+        self.auto_gain_enabled = _enabled;
+        Ok(())
     }
 
     fn get_gain(&self) -> Result<u16, DeviceError> {
@@ -599,7 +658,7 @@ impl LightSensorCapable for Tsl2591SysfsDriver {
     }
 
     fn get_luminosity(&mut self, channel_id: u8) -> Result<u32, DeviceError> {
-        self.assert_state(true)?;
+        self.assert_state(false)?;
 
         let channel = match ChannelId::from(channel_id) {
             Some(c) => c,
@@ -611,14 +670,7 @@ impl LightSensorCapable for Tsl2591SysfsDriver {
             }
         };
 
-        let mut transaction = self.bus.as_ref().unwrap().lock();
-        let (c0, c1) = read_adc_data(
-            &mut transaction,
-            self.config.device_address,
-            channel == ChannelId::FullSpectrum || channel == ChannelId::Visible,
-            channel == ChannelId::Infrared || channel == ChannelId::Visible,
-        )
-        .map_err(|e| DeviceError::HardwareError(format!("failed to read data channel: {}", e)))?;
+        let (c0, c1) = self.read_adc_data()?;
 
         match channel {
             ChannelId::FullSpectrum => Ok(c0.into()),
@@ -634,13 +686,14 @@ impl LightSensorCapable for Tsl2591SysfsDriver {
     }
 
     fn get_illuminance(&mut self) -> Result<f32, DeviceError> {
-        let mut transaction = self.bus.as_ref().unwrap().lock();
-        let (mut c0, c1) = read_adc_data(&mut transaction, self.config.device_address, true, true)
-            .map_err(|e| {
-                DeviceError::HardwareError(format!("failed to read data channel: {}", e))
-            })?;
+        self.assert_state(false)?;
+        let integration_time = self.integration_time.into_millis() as f32;
+        let gain_value = self.gain.into_multiplier() as f32;
 
-        if c0 == 0xFFFF || c1 == 0xFFFF {
+        let (mut c0, c1) = self.read_adc_data()?;
+        let overflow_value = if self.integration_time == IntegrationTime::_100MS { 36863 } else { 65535 };
+
+        if c0 == overflow_value || c1 == overflow_value {
             return Err(DeviceError::Other("sensor reading overflow".to_string()));
         }
 
@@ -648,9 +701,6 @@ impl LightSensorCapable for Tsl2591SysfsDriver {
         if c0 == 0x0000 {
             c0 = 1;
         }
-
-        let integration_time = self.integration_time.into_millis() as f32;
-        let gain_value = self.gain.into_multiplier() as f32;
 
         let cpl = (integration_time * gain_value) / LUX_DF;
         let lux = ((c0 as f32 - c1 as f32) * (1.0 - (c1 as f32 / c0 as f32))) / cpl;
