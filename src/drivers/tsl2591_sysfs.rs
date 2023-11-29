@@ -13,6 +13,7 @@ use std::{
 };
 
 use crate::{
+    bus::i2c_sysfs,
     bus::i2c_sysfs::SysfsI2CBusController,
     capabilities::{Capability, LightSensorCapable},
     config::ConfigError,
@@ -149,92 +150,53 @@ impl Default for Tsl2591SysfsConfig {
     fn default() -> Self {
         Tsl2591SysfsConfig {
             auto_gain_enabled: true,
-            default_gain: 1,
-            default_integration_time: 100,
+            default_gain: GainValue::_1X.into_multiplier(),
+            default_integration_time: IntegrationTime::_100MS.into_millis(),
             device_address: DEFAULT_I2C_ADDR,
             bus_id: 0,
         }
     }
 }
 
-// helper methods for interfacing with the device over I2C
-fn write_command<T: Write + AsRawFd>(
-    bus: &mut I2c<T>,
-    address: u8,
-    command: u8,
-) -> Result<(), Error> {
-    bus.smbus_set_slave_address(address as u16, false)?;
-    bus.write(&[COMMAND_BIT | command])?;
-    Ok(())
-}
-
-fn write_command_with_argument<T: Write + AsRawFd>(
-    bus: &mut I2c<T>,
-    address: u8,
-    command: u8,
-    argument: u8,
-) -> Result<(), Error> {
-    bus.smbus_set_slave_address(address as u16, false)?;
-    bus.write(&[COMMAND_BIT | command])?;
-    bus.write(&[argument])?;
-    Ok(())
-}
-
-fn read<T: Read + AsRawFd>(bus: &mut I2c<T>, address: u8, buf: &mut [u8]) -> Result<(), Error> {
-    bus.smbus_set_slave_address(address as u16, false)?;
-    bus.read_exact(buf)?;
-    Ok(())
-}
-
-fn write_read<T: Read + Write + AsRawFd>(
-    bus: &mut I2c<T>,
-    address: u8,
-    data: &[u8],
-    buf: &mut [u8],
-) -> Result<(), Error> {
-    bus.smbus_set_slave_address(address as u16, false)?;
-    bus.write(data)?;
-    bus.read_exact(buf)?;
-    Ok(())
-}
-
 // helper methods for managing the device
-fn set_timing_and_gain<T: Write + Read + AsRawFd>(
+fn set_timing_and_gain<T: Write + AsRawFd>(
     bus: &mut I2c<T>,
+    address: u8,
     timing: IntegrationTime,
     gain: GainValue,
-    address: u8,
 ) -> Result<(), Error> {
-    disable(bus, address)?;
-    write_command_with_argument(bus, address, REGISTER_CONTROL, timing as u8 | gain as u8)?;
-    enable(bus, address)?;
-
+    i2c_sysfs::write_register(
+        bus,
+        address,
+        COMMAND_BIT | REGISTER_CONTROL,
+        timing as u8 | gain as u8,
+    )?;
     Ok(())
 }
 
 fn enable<T: Write + AsRawFd>(bus: &mut I2c<T>, address: u8) -> Result<(), Error> {
-    write_command_with_argument(bus, address, REGISTER_ENABLE, ENABLE_POWERON | ENABLE_AEN)
+    i2c_sysfs::write_register(
+        bus,
+        address,
+        COMMAND_BIT | REGISTER_ENABLE,
+        ENABLE_POWERON | ENABLE_AEN,
+    )
 }
 
 fn disable<T: Write + AsRawFd>(bus: &mut I2c<T>, address: u8) -> Result<(), Error> {
-    write_command_with_argument(bus, address, REGISTER_ENABLE, ENABLE_POWEROFF)
+    i2c_sysfs::write_register(bus, address, COMMAND_BIT | REGISTER_ENABLE, ENABLE_POWEROFF)
 }
 
 fn is_adc_valid<T: Write + Read + AsRawFd>(bus: &mut I2c<T>, address: u8) -> Result<bool, Error> {
     let mut status_buf = [0u8; 1];
-    write_read(
-        bus,
-        address,
-        &[COMMAND_BIT | REGISTER_STATUS],
-        &mut status_buf,
-    )?;
+    i2c_sysfs::read_register(bus, address, COMMAND_BIT | REGISTER_STATUS, &mut status_buf)?;
 
     return Ok((status_buf[0] & 0x01) != 0);
 }
 
 fn get_chip_id<T: Write + Read + AsRawFd>(bus: &mut I2c<T>, address: u8) -> Result<u8, Error> {
     let mut buf = [0u8; 1];
-    write_read(bus, address, &[COMMAND_BIT | REGISTER_ID_ADDR], &mut buf)?;
+    i2c_sysfs::read_register(bus, address, COMMAND_BIT | REGISTER_ID_ADDR, &mut buf)?;
 
     Ok(buf[0])
 }
@@ -306,20 +268,20 @@ impl Tsl2591SysfsDriver {
         let mut c1_buf = [0u8; 2];
 
         let mut transaction = self.bus.as_ref().unwrap().lock();
-        write_read(
+        i2c_sysfs::read_register(
             &mut transaction,
             self.config.device_address,
-            &[COMMAND_BIT | REGISTER_CHAN0_LSB],
+            COMMAND_BIT | REGISTER_CHAN0_LSB,
             &mut c0_buf,
         )
         .map_err(|e| DeviceError::HardwareError(format!("failed to read data channel: {}", e)))?;
 
         let c0 = (c0_buf[1] as u16) << 8 | c0_buf[0] as u16;
 
-        write_read(
+        i2c_sysfs::read_register(
             &mut transaction,
             self.config.device_address,
-            &[COMMAND_BIT | REGISTER_CHAN1_LSB],
+            COMMAND_BIT | REGISTER_CHAN1_LSB,
             &mut c1_buf,
         )
         .map_err(|e| DeviceError::HardwareError(format!("failed to read data channel: {}", e)))?;
@@ -401,9 +363,9 @@ impl Tsl2591SysfsDriver {
             let mut transaction = self.bus.as_ref().unwrap().lock();
             match set_timing_and_gain(
                 &mut transaction,
+                self.config.device_address,
                 self.integration_time,
                 new_gain,
-                self.config.device_address,
             ) {
                 Ok(_) => {
                     self.gain = new_gain;
@@ -530,9 +492,12 @@ impl DeviceDriver for Tsl2591SysfsDriver {
             )));
         }
 
-        if let Err(e) =
-            set_timing_and_gain(&mut transaction, self.integration_time, self.gain, address)
-        {
+        if let Err(e) = set_timing_and_gain(
+            &mut transaction,
+            self.config.device_address,
+            self.integration_time,
+            self.gain,
+        ) {
             warn!("Failed to set initial timing and gain: {}", e);
         }
 
@@ -634,9 +599,9 @@ impl LightSensorCapable for Tsl2591SysfsDriver {
         let mut transaction = self.bus.as_ref().unwrap().lock();
         set_timing_and_gain(
             &mut transaction,
+            self.config.device_address,
             self.integration_time,
             gain_value,
-            self.config.device_address,
         )
         .map_err(|e| {
             DeviceError::HardwareError(format!("failed to apply new gain value: {}", e))
@@ -674,9 +639,9 @@ impl LightSensorCapable for Tsl2591SysfsDriver {
         let mut transaction = self.bus.as_ref().unwrap().lock();
         set_timing_and_gain(
             &mut transaction,
+            self.config.device_address,
             integration_time,
             self.gain,
-            self.config.device_address,
         )
         .map_err(|e| {
             DeviceError::HardwareError(format!("failed to apply new integration time: {}", e))
