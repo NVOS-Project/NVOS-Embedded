@@ -201,6 +201,19 @@ fn get_chip_id<T: Write + Read + AsRawFd>(bus: &mut I2c<T>, address: u8) -> Resu
     Ok(buf[0])
 }
 
+fn read_adc<T: Write + Read + AsRawFd>(bus: &mut I2c<T>, address: u8) -> Result<(u16, u16), Error> {
+    let mut c0_buf = [0u8; 2];
+    i2c_sysfs::read_register(bus, address, COMMAND_BIT | REGISTER_CHAN0_LSB, &mut c0_buf)?;
+
+    let c0 = (c0_buf[1] as u16) << 8 | c0_buf[0] as u16;
+
+    let mut c1_buf = [0u8; 2];
+    i2c_sysfs::read_register(bus, address, COMMAND_BIT | REGISTER_CHAN1_LSB, &mut c1_buf)?;
+
+    let c1 = (c1_buf[1] as u16) << 8 | c1_buf[0] as u16;
+    Ok((c0, c1))
+}
+
 pub struct Tsl2591SysfsDriver {
     auto_gain_enabled: bool,
     config: Tsl2591SysfsConfig,
@@ -262,31 +275,13 @@ impl Tsl2591SysfsDriver {
         }
     }
 
-    fn read_adc_data(&mut self) -> Result<(u16, u16), DeviceError> {
+    fn get_sensor_data(&mut self) -> Result<(u16, u16), DeviceError> {
         self.assert_state(true)?;
-        let mut c0_buf = [0u8; 2];
-        let mut c1_buf = [0u8; 2];
-
         let mut transaction = self.bus.as_ref().unwrap().lock();
-        i2c_sysfs::read_register(
-            &mut transaction,
-            self.config.device_address,
-            COMMAND_BIT | REGISTER_CHAN0_LSB,
-            &mut c0_buf,
-        )
-        .map_err(|e| DeviceError::HardwareError(format!("failed to read data channel: {}", e)))?;
 
-        let c0 = (c0_buf[1] as u16) << 8 | c0_buf[0] as u16;
-
-        i2c_sysfs::read_register(
-            &mut transaction,
-            self.config.device_address,
-            COMMAND_BIT | REGISTER_CHAN1_LSB,
-            &mut c1_buf,
-        )
-        .map_err(|e| DeviceError::HardwareError(format!("failed to read data channel: {}", e)))?;
-
-        let c1 = (c1_buf[1] as u16) << 8 | c1_buf[0] as u16;
+        let (c0, c1) = read_adc(&mut transaction, self.config.device_address).map_err(|e| {
+            DeviceError::HardwareError(format!("failed to read sensor data: {}", e))
+        })?;
 
         if self.auto_gain_enabled {
             drop(transaction);
@@ -664,7 +659,7 @@ impl LightSensorCapable for Tsl2591SysfsDriver {
             }
         };
 
-        let (c0, c1) = self.read_adc_data()?;
+        let (c0, c1) = self.get_sensor_data()?;
 
         match channel {
             ChannelId::FullSpectrum => Ok(c0.into()),
@@ -684,7 +679,7 @@ impl LightSensorCapable for Tsl2591SysfsDriver {
         let integration_time = self.integration_time.into_millis() as f32;
         let gain_value = self.gain.into_multiplier() as f32;
 
-        let (mut c0, c1) = self.read_adc_data()?;
+        let (mut c0, c1) = self.get_sensor_data()?;
         let overflow_value = if self.integration_time == IntegrationTime::_100MS {
             36863
         } else {
