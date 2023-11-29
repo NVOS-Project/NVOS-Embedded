@@ -11,6 +11,40 @@ use parking_lot::{Mutex, RwLock};
 use uuid::Uuid;
 use rppal::i2c::{I2c, Error};
 
+// helper methods for interfacing with devices over I2C
+pub fn write_command(
+    bus: &mut I2c,
+    address: u8,
+    command: u8,
+) -> Result<(), Error> {
+    bus.set_slave_address(address as u16)?;
+    bus.write(&[command])?;
+    Ok(())
+}
+
+pub fn write_register(
+    bus: &mut I2c,
+    address: u8,
+    register: u8,
+    data: u8,
+) -> Result<(), Error> {
+    bus.set_slave_address(address as u16)?;
+    bus.write(&[register, data])?;
+    Ok(())
+}
+
+pub fn read_register(
+    bus: &mut I2c,
+    address: u8,
+    register: u8,
+    buf: &mut [u8],
+) -> Result<(), Error> {
+    bus.set_slave_address(address as u16)?;
+    bus.write(&[register])?;
+    bus.read(buf)?;
+    Ok(())
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct I2CPinDefinition {
     pub sda: u8,

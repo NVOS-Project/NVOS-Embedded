@@ -10,10 +10,44 @@ use i2c_linux::I2c;
 use log::warn;
 use parking_lot::{Mutex, RwLock};
 use serde_json::Value;
-use std::{any::Any, collections::HashMap, fs::File, path::Path, sync::Arc};
+use std::{any::Any, collections::HashMap, fs::File, path::Path, sync::Arc, io::{Write, Error, Read}, os::fd::AsRawFd};
 use uuid::Uuid;
 
 const SYSFS_I2C_PATH: &str = "/sys/class/i2c-dev";
+
+// helper methods for interfacing with devices over I2C
+pub fn write_command<T: Write + AsRawFd>(
+    bus: &mut I2c<T>,
+    address: u8,
+    command: u8,
+) -> Result<(), Error> {
+    bus.smbus_set_slave_address(address as u16, false)?;
+    bus.write(&[command])?;
+    Ok(())
+}
+
+pub fn write_register<T: Write + AsRawFd>(
+    bus: &mut I2c<T>,
+    address: u8,
+    register: u8,
+    data: u8,
+) -> Result<(), Error> {
+    bus.smbus_set_slave_address(address as u16, false)?;
+    bus.write(&[register, data])?;
+    Ok(())
+}
+
+pub fn read_register<T: Read + Write + AsRawFd>(
+    bus: &mut I2c<T>,
+    address: u8,
+    register: u8,
+    buf: &mut [u8],
+) -> Result<(), Error> {
+    bus.smbus_set_slave_address(address as u16, false)?;
+    bus.write(&[register])?;
+    bus.read_exact(buf)?;
+    Ok(())
+}
 
 fn sysfs_map_err(err: std::io::Error, default_err_msg: &str) -> I2CError {
     I2CError::HardwareError(format!("{}: {}", default_err_msg.to_string(), err))
