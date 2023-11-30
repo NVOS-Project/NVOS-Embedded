@@ -13,7 +13,8 @@ pub fn get_device_capabilities<T: DeviceDriver + ?Sized>(device: &T) -> Vec<Capa
         let has_capability = match capability {
             CapabilityId::LEDController => device.cast::<dyn LEDControllerCapable>().is_some(),
             CapabilityId::GPS => device.cast::<dyn GpsCapable>().is_some(),
-            CapabilityId::LightSensor => device.cast::<dyn LightSensorCapable>().is_some()
+            CapabilityId::LightSensor => device.cast::<dyn LightSensorCapable>().is_some(),
+            CapabilityId::Thermometer => device.cast::<dyn ThermometerCapable>().is_some()
         };
 
         if has_capability {
@@ -30,7 +31,8 @@ pub trait Capability {}
 pub enum CapabilityId {
     LEDController,
     GPS,
-    LightSensor
+    LightSensor,
+    Thermometer
 }
 
 // Any capability APIs will go here
