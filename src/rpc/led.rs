@@ -133,9 +133,9 @@ impl LedController for LEDControllerService {
     }
 
     async fn set_mode(&self, req: Request<SetModeRequest>) -> Result<Response<Void>, Status> {
-        let mode = match LedMode::from_i32(req.get_ref().mode) {
-            Some(mode) => mode,
-            None => return Err(Status::invalid_argument("Unsupported LED mode"))
+        let mode = match LedMode::try_from(req.get_ref().mode) {
+            Ok(mode) => mode,
+            Err(_) => return Err(Status::invalid_argument("Unsupported LED mode"))
         };
 
         let mut device = self.get_device_mut(req.get_ref().address.to_owned())?;
