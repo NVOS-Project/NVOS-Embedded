@@ -409,7 +409,7 @@ impl DeviceDriver for Bmp280SysfsDriver {
     }
 
     fn name(&self) -> String {
-        "bmp280-sysfs".to_string()
+        "bmp280_sysfs".to_string()
     }
 
     fn is_running(&self) -> bool {

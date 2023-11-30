@@ -383,7 +383,7 @@ impl DeviceDriver for Tsl2591SysfsDriver {
     }
 
     fn name(&self) -> String {
-        "tsl2591-sysfs".to_string()
+        "tsl2591_sysfs".to_string()
     }
 
     fn is_running(&self) -> bool {
