@@ -13,7 +13,8 @@ use serde_json::Value;
 use std::{any::Any, collections::HashMap, fs::File, path::Path, sync::Arc, io::{Write, Error, Read}, os::fd::AsRawFd};
 use uuid::Uuid;
 
-const SYSFS_I2C_PATH: &str = "/sys/class/i2c-dev";
+const I2C_CLASS_PATH: &str = "/sys/class/i2c-dev";
+const I2C_DEVICE_PATH: &str = "/dev";
 
 // helper methods for interfacing with devices over I2C
 pub fn write_command<T: Write + AsRawFd>(
@@ -95,7 +96,7 @@ impl SysfsI2CBusController {
         gpio_borrow: &Arc<RwLock<GpioBorrowChecker>>,
         pin_config: HashMap<u8, I2CPinDefinition>,
     ) -> Result<Self, I2CError> {
-        let path = Path::new(SYSFS_I2C_PATH);
+        let path = Path::new(I2C_CLASS_PATH);
         if !path.exists() || !path.is_dir() {
             return Err(I2CError::OsError(
                 "I2C is not supported on this system".to_string(),
@@ -187,7 +188,7 @@ impl SysfsI2CBusController {
             ));
         }
 
-        let bus = I2c::from_path(Path::new(SYSFS_I2C_PATH).join(format!("i2c-{}", bus_id)))
+        let bus = I2c::from_path(Path::new(I2C_DEVICE_PATH).join(format!("i2c-{}", bus_id)))
             .map_err(|err| sysfs_map_err(err, &format!("Internal sysfs error while opening I2C bus {}", bus_id)))?;
 
         let borrow_id = borrow_checker.borrow_many(definition.to_vec())
