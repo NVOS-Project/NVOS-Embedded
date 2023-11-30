@@ -74,3 +74,14 @@ pub trait LightSensorCapable : Capability {
     fn get_luminosity(&mut self, channel_id: u8) -> Result<u32, DeviceError>;
     fn get_illuminance(&mut self) -> Result<f32, DeviceError>;
 }
+
+pub trait ThermometerCapable : Capability {
+    fn get_supported_gains(&self) -> HashMap<u8, u16>;
+    fn get_supported_intervals(&self) -> HashMap<u8, u16>;
+    fn get_gain(&self) -> Result<u16, DeviceError>;
+    fn set_gain(&mut self, gain_id: u8) -> Result<(), DeviceError>;
+    fn get_interval(&self) -> Result<u16, DeviceError>;
+    fn set_interval(&mut self, interval_id: u8) -> Result<(), DeviceError>;
+    fn get_temperature_celsius(&mut self) -> Result<f32, DeviceError>;
+    fn get_temperature_fahrenheit(&mut self) -> Result<f32, DeviceError>;
+}
