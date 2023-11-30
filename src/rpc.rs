@@ -6,3 +6,4 @@ pub mod led;
 pub mod gps;
 pub mod network;
 pub mod light_sensor;
+pub mod thermometer;

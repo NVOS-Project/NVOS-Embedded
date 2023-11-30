@@ -11,9 +11,9 @@ mod rpc;
 mod tests;
 
 use config::{ConfigError, Configuration};
-use device::{Device, DeviceServer, DeviceError};
+use device::{Device, DeviceError, DeviceServer};
 use gpio::{GpioBorrowChecker, PinState};
-use log::{error, info, warn, LevelFilter, debug, SetLoggerError};
+use log::{debug, error, info, warn, LevelFilter, SetLoggerError};
 use parking_lot::RwLock;
 use rpc::reflection::{device_reflection_server::DeviceReflectionServer, DeviceReflectionService};
 use simple_logger::SimpleLogger;
@@ -31,12 +31,16 @@ use uuid::Uuid;
 
 use crate::{
     adb::{AdbServer, PortType},
-    drivers::{sysfs_led::SysfsLedController, gps_uart::UartGps, tsl2591_sysfs::Tsl2591SysfsDriver},
+    drivers::{
+        gps_uart::UartGps, sysfs_led::SysfsLedController, tsl2591_sysfs::Tsl2591SysfsDriver,
+    },
     rpc::{
         gps::{gps_server::GpsServer, GpsService},
         heartbeat::{heartbeat_server::HeartbeatServer, HeartbeatService},
         led::{led_controller_server::LedControllerServer, LEDControllerService},
-        network::{network_manager_server::NetworkManagerServer, NetworkManagerService}, light_sensor::{light_sensor_server::LightSensorServer, LightSensorService},
+        light_sensor::{light_sensor_server::LightSensorServer, LightSensorService},
+        network::{network_manager_server::NetworkManagerServer, NetworkManagerService},
+        thermometer::{thermometer_server::ThermometerServer, ThermometerService},
     },
 };
 use bus::i2c::I2CBusController;
@@ -51,19 +55,19 @@ use bus::BusController;
 const CONFIG_PATH: &str = "nvos_config.json";
 
 #[cfg(debug_assertions)]
-fn setup_logger()  -> Result<(), SetLoggerError>{
+fn setup_logger() -> Result<(), SetLoggerError> {
     SimpleLogger::new()
-    .with_colors(true)
-    .with_level(LevelFilter::Debug)
-    .init()
+        .with_colors(true)
+        .with_level(LevelFilter::Debug)
+        .init()
 }
 
 #[cfg(not(debug_assertions))]
 fn setup_logger() -> Result<(), SetLoggerError> {
     SimpleLogger::new()
-    .with_colors(true)
-    .with_level(LevelFilter::Info)
-    .init()
+        .with_colors(true)
+        .with_level(LevelFilter::Info)
+        .init()
 }
 
 #[tokio::main]
@@ -188,7 +192,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "sysfs_generic_led" => Device::from_config::<SysfsLedController>(device_config, None),
             "gps_uart" => Device::from_config::<UartGps>(device_config, None),
             "tsl2591_sysfs" => Device::from_config::<Tsl2591SysfsDriver>(device_config, None),
-            unknown_driver => Err(DeviceError::InvalidConfig(format!("device driver {} is not supported by this server", unknown_driver)))
+            unknown_driver => Err(DeviceError::InvalidConfig(format!(
+                "device driver {} is not supported by this server",
+                unknown_driver
+            ))),
         };
 
         match device_instance {
@@ -203,9 +210,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 debug!("  - {:?}", cap);
                             }
                         }
-                        None => warn!("Failed to list device capabilities: device not found")
+                        None => warn!("Failed to list device capabilities: device not found"),
                     }
-                },
+                }
                 Err(e) => error!(
                     "Failed to register device (driver: {}): {}",
                     device_config.driver, e
@@ -323,6 +330,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .add_service(tonic_web::enable(GpsServer::new(GpsService::new(
             &device_server,
         ))))
+        .add_service(tonic_web::enable(ThermometerServer::new(
+            ThermometerService::new(&device_server),
+        )))
         .add_service(tonic_web::enable(NetworkManagerServer::new(
             NetworkManagerService::new(&adb_server),
         )))

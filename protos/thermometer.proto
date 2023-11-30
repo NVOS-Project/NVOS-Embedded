@@ -1,0 +1,59 @@
+syntax = "proto3";
+package thermometer;
+
+import "void.proto";
+
+message GainValue {
+    uint32 Id = 1;
+    uint32 Multiplier = 2;
+}
+
+message SleepInterval {
+    uint32 Id = 1;
+    uint32 TimeMs = 2;
+}
+
+message ThermometerRequest {
+    string Address = 1;
+}
+
+message GetSupportedGainsResponse {
+    repeated GainValue Values = 1;
+}
+
+message GetSupportedIntervalsResponse {
+    repeated SleepInterval Values = 1;
+}
+
+message GetGainResponse {
+    uint32 GainMultiplier = 1;
+}
+
+message SetGainRequest {
+    string Address = 1;
+    uint32 GainId = 2;
+}
+
+message GetIntervalResponse {
+    uint32 SleepIntervalMs = 1;
+}
+
+message SetIntervalRequest {
+    string Address = 1;
+    uint32 IntervalId = 2;
+}
+
+message GetTemperatureResponse {
+    uint32 Value = 1;
+}
+
+service Thermometer {
+    rpc GetSupportedGains (ThermometerRequest) returns (GetSupportedGainsResponse);
+    rpc GetSupportedIntervals (ThermometerRequest) returns (GetSupportedIntervalsResponse);
+    rpc GetGain (ThermometerRequest) returns (GetGainResponse);
+    rpc SetGain (SetGainRequest) returns (void.Void);
+    rpc GetInterval (ThermometerRequest) returns (GetIntervalResponse);
+    rpc SetInterval (SetIntervalRequest) returns (void.Void);
+    rpc GetTemperatureCelsius (ThermometerRequest) returns (GetTemperatureResponse);
+    rpc GetTemperatureFahrenheit (ThermometerRequest) returns (GetTemperatureResponse);
+}
