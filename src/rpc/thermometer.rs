@@ -169,7 +169,7 @@ impl Thermometer for ThermometerService {
     ) -> Result<Response<GetTemperatureResponse>, Status> {
         let mut device = self.get_device_mut(request.get_ref().address.to_owned())?;
         let temperature = device.get_temperature_celsius().map_err(errors::map_device_error)?;
-        Ok(Response::new(GetTemperatureResponse { value: temperature.to_bits() }))
+        Ok(Response::new(GetTemperatureResponse { value: temperature }))
     }
 
     async fn get_temperature_fahrenheit(
@@ -178,6 +178,6 @@ impl Thermometer for ThermometerService {
     ) -> Result<Response<GetTemperatureResponse>, Status> {
         let mut device = self.get_device_mut(request.get_ref().address.to_owned())?;
         let temperature = device.get_temperature_fahrenheit().map_err(errors::map_device_error)?;
-        Ok(Response::new(GetTemperatureResponse { value: temperature.to_bits() }))
+        Ok(Response::new(GetTemperatureResponse { value: temperature }))
     }
 }

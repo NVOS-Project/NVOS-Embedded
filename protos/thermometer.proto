@@ -44,7 +44,7 @@ message SetIntervalRequest {
 }
 
 message GetTemperatureResponse {
-    uint32 Value = 1;
+    float Value = 1;
 }
 
 service Thermometer {
