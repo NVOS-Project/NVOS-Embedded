@@ -267,7 +267,7 @@ fn read_calib_data<T: Read + Write + AsRawFd>(
     address: u8,
 ) -> Result<CalibrationData, Error> {
     let mut calib_buf = [0u8; CALIB_DATA_LEN];
-    i2c_sysfs::read_register(bus, address, REGISTER_CALIB0, &mut calib_buf)?;
+    i2c_sysfs::read_register(bus, address, COMMAND_BIT | REGISTER_CALIB0, &mut calib_buf)?;
 
     Ok(CalibrationData {
         dig_T1: (calib_buf[1] as u16) << 8 | calib_buf[0] as u16,
