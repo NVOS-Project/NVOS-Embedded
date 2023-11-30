@@ -32,7 +32,7 @@ use uuid::Uuid;
 use crate::{
     adb::{AdbServer, PortType},
     drivers::{
-        gps_uart::UartGps, sysfs_led::SysfsLedController, tsl2591_sysfs::Tsl2591SysfsDriver,
+        gps_uart::UartGps, sysfs_led::SysfsLedController, tsl2591_sysfs::Tsl2591SysfsDriver, bmp280_sysfs::Bmp280SysfsDriver,
     },
     rpc::{
         gps::{gps_server::GpsServer, GpsService},
@@ -192,6 +192,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "sysfs_generic_led" => Device::from_config::<SysfsLedController>(device_config, None),
             "gps_uart" => Device::from_config::<UartGps>(device_config, None),
             "tsl2591_sysfs" => Device::from_config::<Tsl2591SysfsDriver>(device_config, None),
+            "bmp280_sysfs" => Device::from_config::<Bmp280SysfsDriver>(device_config, None),
             unknown_driver => Err(DeviceError::InvalidConfig(format!(
                 "device driver {} is not supported by this server",
                 unknown_driver
