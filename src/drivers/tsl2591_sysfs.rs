@@ -626,7 +626,7 @@ impl LightSensorCapable for Tsl2591SysfsDriver {
         let integration_time = match IntegrationTime::from_millis(*interval_millis) {
             Some(time) => time,
             None => {
-                error!("Failed to convert a time interval of {}ms to am IntegrationTime because it is unsupported, but it is being offered in the list of supported integration times", interval_millis);
+                error!("Failed to convert a time interval of {}ms to an IntegrationTime because it is unsupported, but it is being offered in the list of supported integration times", interval_millis);
                 return Err(DeviceError::Internal);
             }
         };
