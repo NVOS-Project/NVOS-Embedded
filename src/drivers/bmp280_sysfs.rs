@@ -703,3 +703,69 @@ impl ThermometerCapable for Bmp280SysfsDriver {
         Ok(temp * (9.0/5.0) + 32.0)
     }
 }
+
+impl BarometerCapable for Bmp280SysfsDriver {
+    fn get_supported_gains(&self) -> HashMap<u8, u16> {
+        self._get_supported_gains()
+    }
+
+    fn get_supported_intervals(&self) -> HashMap<u8, u16> {
+        self._get_supported_intervals()
+    }
+
+    fn get_gain(&self) -> Result<u16, DeviceError> {
+        self.assert_state(false)?;
+        Ok(self.pressure_gain.into_multiplier())
+    }
+
+    fn set_gain(&mut self, gain_id: u8) -> Result<(), DeviceError> {
+        self.assert_state(true)?;
+        let gain_multiplier = match SUPPORTED_GAIN_VALUES.get(gain_id as usize) {
+            Some(gain) => gain,
+            None => {
+                return Err(DeviceError::InvalidOperation(format!(
+                    "gain value ID is not supported: {}",
+                    gain_id
+                )))
+            }
+        };
+
+        let gain_value = match GainValue::from_multiplier(*gain_multiplier) {
+            Some(gain) => gain,
+            None => {
+                error!("Failed to convert a gain multiplier of {}x to a GainValue because it is unsupported, but it is being offered in the list of supported gain values", gain_multiplier);
+                return Err(DeviceError::Internal);
+            },
+        };
+
+        let address = self.config.device_address;
+        let mut transaction = self.bus.as_ref().unwrap().lock();
+        wait_adc_valid(&mut transaction, address, SPINWAIT_INTERVAL, self.standby_time.into_millis() + SPINWAIT_INTERVAL)?;
+        set_mode_and_gain(&mut transaction, address, self.thermometer_gain, gain_value, PowerMode::Normal)
+            .map_err(|e| DeviceError::HardwareError(format!("failed to apply new gain value: {}", e)))?;
+
+        self.pressure_gain = gain_value;
+        Ok(())
+    }
+
+    fn get_interval(&self) -> Result<u16, DeviceError> {
+        self._get_interval()
+    }
+
+    fn set_interval(&mut self, interval_id: u8) -> Result<(), DeviceError> {
+        self._set_interval(interval_id)
+    }
+
+    fn get_pressure(&mut self) -> Result<f32, DeviceError> {
+        let (_, press) = self.get_sensor_data()?; 
+        Ok(press)
+    }
+
+    fn get_altitude(&mut self) -> Result<f32, DeviceError> {
+        let pressure = self.get_pressure()?;
+        let pressure_at_sea_level = self.config.pressure_at_sea_level as f32;
+        let altitude = (1.0 - (pressure / pressure_at_sea_level).powf(1.0 / 5.257)) * 44330.77;
+
+        Ok(altitude)
+    }
+}
