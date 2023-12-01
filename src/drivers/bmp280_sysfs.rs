@@ -704,6 +704,7 @@ impl ThermometerCapable for Bmp280SysfsDriver {
     }
 }
 
+#[cast_to]
 impl BarometerCapable for Bmp280SysfsDriver {
     fn get_supported_gains(&self) -> HashMap<u8, u16> {
         self._get_supported_gains()
