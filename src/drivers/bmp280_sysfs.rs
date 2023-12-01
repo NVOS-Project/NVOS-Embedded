@@ -16,7 +16,7 @@ use std::{
 
 use crate::{
     bus::i2c_sysfs::{self, SysfsI2CBusController},
-    capabilities::{Capability, ThermometerCapable},
+    capabilities::{Capability, ThermometerCapable, BarometerCapable},
     config::ConfigError,
     device::{DeviceDriver, DeviceError},
 };
@@ -399,6 +399,75 @@ impl Bmp280SysfsDriver {
             ))
         }
     }
+
+    fn _get_supported_intervals(&self) -> HashMap<u8, u16> {
+        SUPPORTED_STANDBY_TIMES
+            .iter()
+            .enumerate()
+            .map(|(index, &value)| (index as u8, value))
+            .collect()
+    }
+
+    fn _get_supported_gains(&self) -> HashMap<u8, u16> {
+        SUPPORTED_GAIN_VALUES
+            .iter()
+            .enumerate()
+            .map(|(index, &value)| (index as u8, value))
+            .collect()
+    }
+
+    fn _get_interval(&self) -> Result<u16, DeviceError> {
+        self.assert_state(false)?;
+        Ok(self.standby_time.into_millis())
+    }
+
+    fn _set_interval(&mut self, interval_id: u8) -> Result<(), DeviceError> {
+        self.assert_state(true)?;
+        let standby_millis = match SUPPORTED_STANDBY_TIMES.get(interval_id as usize) {
+            Some(time) => time,
+            None => return Err(DeviceError::HardwareError(format!(
+                "standby time ID is not supported: {}",
+                interval_id
+            ))),
+        };
+
+        let standby_time = match StandbyTime::from_millis(*standby_millis) {
+            Some(time) => time,
+            None => {
+                error!("Failed to convert a time interval of {}ms to a StandbyTime because it is unsupported, but it is being offered in the list of supported integration times", standby_millis);
+                return Err(DeviceError::Internal);
+            },
+        };
+
+        let address = self.config.device_address;
+        let mut transaction = self.bus.as_ref().unwrap().lock();
+        wait_adc_valid(&mut transaction, address, SPINWAIT_INTERVAL, self.standby_time.into_millis() + SPINWAIT_INTERVAL)?;
+        set_standby_time(&mut transaction, address, standby_time)
+            .map_err(|e| DeviceError::HardwareError(format!("failed to apply new standby time: {}", e)))?;
+
+        self.standby_time = standby_time;
+        Ok(())
+    }
+
+    fn get_sensor_data(&mut self) -> Result<(f32, f32), DeviceError> {
+        self.assert_state(true)?;
+
+        let address = self.config.device_address;
+        let calibration_data = match self.calibration_data.as_ref() {
+            Some(data) => data,
+            None => {
+                error!("Calibration data was uninitialized");
+                return Err(DeviceError::Internal);
+            }
+        };
+
+        let mut transaction = self.bus.as_ref().unwrap().lock();
+        // technically we should wait for the ADCs to become valid rn buuut it seems like we can read them just fine
+        let (temp_raw, press_raw) = read_adc(&mut transaction, address)
+            .map_err(|e| DeviceError::HardwareError(format!("failed to read sensor data: {}", e)))?;
+
+        Ok(compensate_values(temp_raw as i32, press_raw as i32, calibration_data))
+    }
 }
 
 impl DeviceDriver for Bmp280SysfsDriver {
@@ -574,19 +643,11 @@ impl Capability for Bmp280SysfsDriver {}
 #[cast_to]
 impl ThermometerCapable for Bmp280SysfsDriver {
     fn get_supported_gains(&self) -> HashMap<u8, u16> {
-        SUPPORTED_GAIN_VALUES
-            .iter()
-            .enumerate()
-            .map(|(index, &value)| (index as u8, value))
-            .collect()
+        self._get_supported_gains()
     }
 
     fn get_supported_intervals(&self) -> HashMap<u8, u16> {
-        SUPPORTED_STANDBY_TIMES
-            .iter()
-            .enumerate()
-            .map(|(index, &value)| (index as u8, value))
-            .collect()
+        self._get_supported_intervals()
     }
 
     fn get_gain(&self) -> Result<u16, DeviceError> {
@@ -625,56 +686,15 @@ impl ThermometerCapable for Bmp280SysfsDriver {
     }
 
     fn get_interval(&self) -> Result<u16, DeviceError> {
-        self.assert_state(false)?;
-        Ok(self.standby_time.into_millis())
+        self._get_interval()
     }
 
     fn set_interval(&mut self, interval_id: u8) -> Result<(), DeviceError> {
-        self.assert_state(true)?;
-        let standby_millis = match SUPPORTED_STANDBY_TIMES.get(interval_id as usize) {
-            Some(time) => time,
-            None => return Err(DeviceError::HardwareError(format!(
-                "standby time ID is not supported: {}",
-                interval_id
-            ))),
-        };
-
-        let standby_time = match StandbyTime::from_millis(*standby_millis) {
-            Some(time) => time,
-            None => {
-                error!("Failed to convert a time interval of {}ms to a StandbyTime because it is unsupported, but it is being offered in the list of supported integration times", standby_millis);
-                return Err(DeviceError::Internal);
-            },
-        };
-
-        let address = self.config.device_address;
-        let mut transaction = self.bus.as_ref().unwrap().lock();
-        wait_adc_valid(&mut transaction, address, SPINWAIT_INTERVAL, self.standby_time.into_millis() + SPINWAIT_INTERVAL)?;
-        set_standby_time(&mut transaction, address, standby_time)
-            .map_err(|e| DeviceError::HardwareError(format!("failed to apply new standby time: {}", e)))?;
-
-        self.standby_time = standby_time;
-        Ok(())
+        self._set_interval(interval_id)
     }
 
     fn get_temperature_celsius(&mut self) -> Result<f32, DeviceError> {
-        self.assert_state(true)?;
-
-        let address = self.config.device_address;
-        let calibration_data = match self.calibration_data.as_ref() {
-            Some(data) => data,
-            None => {
-                error!("Calibration data was uninitialized");
-                return Err(DeviceError::Internal);
-            }
-        };
-
-        let mut transaction = self.bus.as_ref().unwrap().lock();
-        // technically we should wait for the ADCs to become valid rn buuut it seems like we can read them just fine
-        let (temp_raw, press_raw) = read_adc(&mut transaction, address)
-            .map_err(|e| DeviceError::HardwareError(format!("failed to read sensor data: {}", e)))?;
-
-        let (temp, _) = compensate_values(temp_raw as i32, press_raw as i32, calibration_data);
+        let (temp, _) = self.get_sensor_data()?; 
         Ok(temp)
     }
 
