@@ -14,7 +14,8 @@ pub fn get_device_capabilities<T: DeviceDriver + ?Sized>(device: &T) -> Vec<Capa
             CapabilityId::LEDController => device.cast::<dyn LEDControllerCapable>().is_some(),
             CapabilityId::GPS => device.cast::<dyn GpsCapable>().is_some(),
             CapabilityId::LightSensor => device.cast::<dyn LightSensorCapable>().is_some(),
-            CapabilityId::Thermometer => device.cast::<dyn ThermometerCapable>().is_some()
+            CapabilityId::Thermometer => device.cast::<dyn ThermometerCapable>().is_some(),
+            CapabilityId::Barometer => device.cast::<dyn BarometerCapable>().is_some()
         };
 
         if has_capability {
@@ -32,7 +33,8 @@ pub enum CapabilityId {
     LEDController,
     GPS,
     LightSensor,
-    Thermometer
+    Thermometer,
+    Barometer
 }
 
 // Any capability APIs will go here
@@ -86,4 +88,15 @@ pub trait ThermometerCapable : Capability {
     fn set_interval(&mut self, interval_id: u8) -> Result<(), DeviceError>;
     fn get_temperature_celsius(&mut self) -> Result<f32, DeviceError>;
     fn get_temperature_fahrenheit(&mut self) -> Result<f32, DeviceError>;
+}
+
+pub trait BarometerCapable : Capability {
+    fn get_supported_gains(&self) -> HashMap<u8, u16>;
+    fn get_supported_intervals(&self) -> HashMap<u8, u16>;
+    fn get_gain(&self) -> Result<u16, DeviceError>;
+    fn set_gain(&mut self, gain_id: u8) -> Result<(), DeviceError>;
+    fn get_interval(&self) -> Result<u16, DeviceError>;
+    fn set_interval(&mut self, interval_id: u8) -> Result<(), DeviceError>;
+    fn get_pressure(&mut self) -> Result<f32, DeviceError>;
+    fn get_altitude(&mut self) -> Result<f32, DeviceError>;
 }

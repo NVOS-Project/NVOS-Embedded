@@ -40,7 +40,8 @@ use crate::{
         led::{led_controller_server::LedControllerServer, LEDControllerService},
         light_sensor::{light_sensor_server::LightSensorServer, LightSensorService},
         network::{network_manager_server::NetworkManagerServer, NetworkManagerService},
-        thermometer::{thermometer_server::ThermometerServer, ThermometerService},
+        thermometer::{thermometer_server::ThermometerServer, ThermometerService}, 
+        barometer::{barometer_server::BarometerServer, BarometerService}
     },
 };
 use bus::i2c::I2CBusController;
@@ -333,6 +334,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ))))
         .add_service(tonic_web::enable(ThermometerServer::new(
             ThermometerService::new(&device_server),
+        )))
+        .add_service(tonic_web::enable(BarometerServer::new(
+            BarometerService::new(&device_server),
         )))
         .add_service(tonic_web::enable(NetworkManagerServer::new(
             NetworkManagerService::new(&adb_server),

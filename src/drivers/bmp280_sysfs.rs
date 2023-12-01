@@ -159,6 +159,7 @@ pub struct Bmp280SysfsConfig {
     pub default_standby_time: u16,
     pub device_address: u8,
     pub device_ready_timeout: u16,
+    pub pressure_at_sea_level: u32,
     pub bus_id: u8,
 }
 
@@ -170,6 +171,7 @@ impl Default for Bmp280SysfsConfig {
             default_standby_time: StandbyTime::_63MS.into_millis(),
             device_address: DEFAULT_I2C_ADDR,
             device_ready_timeout: 100,
+            pressure_at_sea_level: 101325,
             bus_id: 0,
         }
     }

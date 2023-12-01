@@ -8,6 +8,7 @@ enum CapabilityId {
     GPS = 1;
     LightSensor = 2;
     Thermometer = 3;
+    Barometer = 4;
 }
 
 message Device {
