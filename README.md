@@ -37,7 +37,12 @@ This repository contains the embedded firmware that drives the NVOS root control
   - GPS: ✔️
   - Compass: ❌
   - LED: ✔️
+  - Light sensor: ✔️
+  - Thermometer: ✔️
+  - Barometer:  ✔️
 - ### Device drivers:
   - LED (sysfs_generic_led): ✔️
   - GPS (gps_uart): ✔️
   - Compass (???): ❌
+  - Ambient light sensor (tsl2591_sysfs):✔️
+  - Temperature (bmp280_sysfs): ✔️
